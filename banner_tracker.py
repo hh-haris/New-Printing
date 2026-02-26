@@ -533,6 +533,8 @@ class AddBannerForm(tk.Frame):
         for entry in [self.desc, self.w_entry, self.h_entry, self.pcs_entry,
                        self.date_entry, self.notes_entry]:
             entry.bind("<Return>", lambda e: self._add())
+
+    def _clear_ph(self):
         if self.desc.get() == "e.g. Eid Sale Banner":
             self.desc.delete(0, "end")
 
