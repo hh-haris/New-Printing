@@ -662,7 +662,7 @@ class BannerTrackerApp(tk.Tk):
 
     def _shortcut_search(self):
         self.banner_table.search_entry.focus_set()
-        if self.banner_table.search_entry.get() == "\U0001f50d Search...":
+        if self.banner_table.search_entry.get() == "🔍 Search...":
             self.banner_table.search_entry.delete(0, "end")
 
     def _show_shortcuts_help(self):
@@ -700,10 +700,10 @@ class BannerTrackerApp(tk.Tk):
         if self._price_locked:
             self.price_entry.config(state="disabled", disabledbackground=C["border"],
                                     disabledforeground=C["muted"])
-            self.lock_btn.config(text="\U0001f512")
+            self.lock_btn.config(text="🔒")
         else:
             self.price_entry.config(state="normal", bg=C["accent_lt"], fg=C["accent"])
-            self.lock_btn.config(text="\U0001f513")
+            self.lock_btn.config(text="🔓")
             self.price_entry.focus_set()
 
     def _save_price(self):
@@ -1955,8 +1955,10 @@ class BannerTable(tk.Frame):
         self.refresh()
 
     def _apply_date_filter(self):
-        self.filter_from = (parse_date(self.from_var.get()) or "") if self.from_var.get().strip() else ""
-        self.filter_to = (parse_date(self.to_var.get()) or "") if self.to_var.get().strip() else ""
+        from_val = self.from_var.get().strip()
+        to_val = self.to_var.get().strip()
+        self.filter_from = (parse_date(from_val) or "") if from_val else ""
+        self.filter_to = (parse_date(to_val) or "") if to_val else ""
         self.refresh()
 
     def _clear_date_filter(self):
@@ -2211,9 +2213,16 @@ class EditBannerDialog(tk.Toplevel):
         canvas_win = canvas.create_window((0, 0), window=inner, anchor="nw")
         inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.bind("<Configure>", lambda e: canvas.itemconfig(canvas_win, width=e.width))
-        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>",
-            lambda ev: canvas.yview_scroll(-1 * (ev.delta // 120), "units")))
-        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
+        self._scroll_binding = None
+        def _bind_edit_scroll(e):
+            self._scroll_binding = canvas.bind_all("<MouseWheel>",
+                lambda ev: canvas.yview_scroll(-1 * (ev.delta // 120), "units"))
+        def _unbind_edit_scroll(e):
+            if self._scroll_binding:
+                canvas.unbind_all("<MouseWheel>")
+                self._scroll_binding = None
+        canvas.bind("<Enter>", _bind_edit_scroll)
+        canvas.bind("<Leave>", _unbind_edit_scroll)
 
         body = tk.Frame(inner, bg=C["white"])
         body.pack(fill="x", padx=20, pady=10)
