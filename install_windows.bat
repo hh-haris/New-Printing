@@ -14,6 +14,9 @@ IF ERRORLEVEL 1 (
 )
 echo Python found!
 echo.
+echo Installing required packages...
+pip install reportlab pillow
+echo.
 echo Creating desktop shortcut...
 python -c "
 import os, sys

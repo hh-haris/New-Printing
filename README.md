@@ -7,30 +7,38 @@ python banner_tracker.py
 
 ## Requirements
 Python 3.8+  (Tkinter included in most Python installs)
+```
+pip install reportlab pillow
+```
 
-## New Features in This Version
+## Features
 
-### Core Fixes
-- **Sidebar is now fully scrollable** — all panels accessible by scrolling
-- **Banner table scroll is fixed** — only scrolls rows, not headers/filters
-- **Date format** is dd/mm/yyyy throughout
+### Core
+- **Sidebar is fully scrollable** — all panels accessible by scrolling
+- **Banner table scroll** — only scrolls rows, not headers/filters
+- **Date format** is dd/mm/yyyy throughout (labeled "Mail Send")
 
-### New Features
-1. **Auto Payment Mark** — When you record a payment, banners are auto-marked paid (oldest first); partial payment marks banner as "partial"
-2. **Expandable Payment History** — Click a month to expand weekly/daily breakdown
-3. **Price Change Prompt** — Changing the rate asks whether to update old banners or just future ones
-4. **Pieces per Banner** — Add number of pieces (default 1); sqft auto-multiplies
-5. **Auto Date** — Today's date is pre-filled (editable in dd/mm/yyyy)
-6. **Payment Reminder** — On startup, warns if any banner is unpaid 10+ days (configurable)
-7. **Carry-Forward Balance** — Enter a negative amount to track debt owed to printer
-8. **Client Profit Tracking** — Set client name + rate or total per job; auto-calculates the other
-9. **Shop Profit Report** — See total print cost, client revenue, net profit, best month, aging report
-10. **Date Range Filter** — Filter banner list by custom date range
-11. **Edit Banner** — Edit all fields of any existing banner
-12. **Aging Report** — Shows overdue 10–29 day and 30+ day jobs in profit panel
-13. **Negative Payment** — Enter negative amounts to record debt owed to printer
+### Banner Jobs
+- Add banner jobs with description (multi-line, expandable), dimensions, pieces, client rate/total
+- Edit and duplicate existing jobs
+- Auto-marks banners paid oldest-first when payment recorded
+- Date range filter and search
 
-### UI Changes
-- Title: **Modern Printers** with subtitle *Banner Printing Tracker*
-- Clean white theme, no dark backgrounds
-- Summary bar shows: Print Cost, Paid, Balance, Carry Forward, Client Revenue, Net Profit
+### Payments
+- Record payments (positive or negative); negative amounts increase Balance Due
+- Payment history grouped by month/week with right-aligned delete icons
+- Balance Due shows credit when payments exceed billed amount
+
+### Shop Profit Report
+- Comprehensive breakdown: totals, margins, per-month stats
+- Monthly expandable sections showing jobs, sqft, cost, revenue, profit
+- Aging report (overdue 10–29 and 30+ days)
+
+### Settings (expandable)
+- Payment reminder days
+- **Data Management** (sub-expandable):
+  - Export Banner Jobs as PDF (professional template)
+  - Export Payment Records as PDF (receipt style)
+  - Export Entire Database as CSV
+  - Export Entire Database as PDF
+  - Clear/reset data options
