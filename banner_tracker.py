@@ -307,8 +307,8 @@ def export_banners_pdf(rows, filepath):
     # Table headers
     story.append(Paragraph("Banner Jobs", section_s))
     header = ["#", "Description", "Mail Send", "Size", "Sq Ft",
-              "Print Cost", "Client Rev", "Status"]
-    col_w = [0.7*cm, 6.0*cm, 2.0*cm, 2.2*cm, 1.3*cm, 1.9*cm, 2.0*cm, 1.5*cm]
+              "Print Cost", "Client Rev", "Status", "Notes"]
+    col_w = [0.7*cm, 4.5*cm, 2.0*cm, 2.0*cm, 1.3*cm, 1.9*cm, 2.0*cm, 1.5*cm, 2.5*cm]
     data = [header]
     for i, r in enumerate(rows, 1):
         size_str = f"{r['width_ft']}×{r['height_ft']}"
@@ -323,19 +323,21 @@ def export_banners_pdf(rows, filepath):
             _pdf_wrap(f"Rs {r['amount']:,.0f}", align=TA_RIGHT),
             _pdf_wrap(f"Rs {r['client_amount']:,.0f}" if r["client_amount"] else "—", align=TA_RIGHT),
             _pdf_wrap((r["status"] or "").upper(), align=TA_CENTER, bold=True),
+            _pdf_wrap(r["notes"] or ""),
         ])
 
     t = LongTable(data, colWidths=col_w, repeatRows=1)
     row_colors = []
-    for i in range(1, len(data)):
-        status = data[i][7]
+    for i, r in enumerate(rows):
+        status = (r["status"] or "").upper()
+        row_idx = i + 1
         if status == "PAID":
-            row_colors.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor("#F0FDF4")))
+            row_colors.append(("BACKGROUND", (0, row_idx), (-1, row_idx), colors.HexColor("#F0FDF4")))
         elif status == "PENDING":
-            row_colors.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor("#FEF2F2")))
+            row_colors.append(("BACKGROUND", (0, row_idx), (-1, row_idx), colors.HexColor("#FEF2F2")))
         else:
-            row_colors.append(("BACKGROUND", (0, i), (-1, i),
-                               colors.white if i % 2 == 0 else colors.HexColor("#F8F8FB")))
+            row_colors.append(("BACKGROUND", (0, row_idx), (-1, row_idx),
+                               colors.white if row_idx % 2 == 0 else colors.HexColor("#F8F8FB")))
 
     t.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2563EB")),
@@ -344,8 +346,8 @@ def export_banners_pdf(rows, filepath):
         ("FONTSIZE", (0, 0), (-1, 0), 8),
         ("FONTSIZE", (0, 1), (-1, -1), 8),
         ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E8E8EC")),
-        ("PADDING", (0, 0), (-1, -1), 6),
-        ("LEFTPADDING", (1, 1), (1, -1), 6),
+        ("PADDING", (0, 0), (-1, -1), 7),
+        ("LEFTPADDING", (1, 1), (1, -1), 7),
         ("RIGHTPADDING", (1, 1), (1, -1), 8),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("VALIGN", (0, 1), (-1, -1), "TOP"),
@@ -435,7 +437,7 @@ def export_payments_pdf(rows, total_billed, filepath):
         ("ROWBACKGROUNDS", (0, 1), (-1, -1),
          [colors.white, colors.HexColor("#F8F8FB")]),
         ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E8E8EC")),
-        ("PADDING", (0, 0), (-1, -1), 6),
+        ("PADDING", (0, 0), (-1, -1), 7),
         ("VALIGN", (0, 1), (-1, -1), "TOP"),
         ("ALIGN", (2, 0), (2, -1), "RIGHT"),
     ]))
@@ -471,8 +473,8 @@ def export_full_db_pdf(banners, payments, filepath):
     story.append(Paragraph(f"Banner Jobs ({len(banners)} records)", section_s))
     if banners:
         header = ["#", "Description", "Mail Send", "Size", "Sq Ft", "Print Cost",
-                  "Client Rev", "Status"]
-        col_w = [0.7*cm, 5.8*cm, 2.0*cm, 2.1*cm, 1.3*cm, 1.9*cm, 2.0*cm, 1.5*cm]
+                  "Client Rev", "Status", "Notes"]
+        col_w = [0.7*cm, 4.2*cm, 2.0*cm, 1.8*cm, 1.3*cm, 1.9*cm, 2.0*cm, 1.5*cm, 2.2*cm]
         data = [header]
         for i, r in enumerate(banners, 1):
             size_str = f"{r['width_ft']}×{r['height_ft']}"
@@ -487,6 +489,7 @@ def export_full_db_pdf(banners, payments, filepath):
                 _pdf_wrap(f"Rs {r['amount']:,.0f}", align=TA_RIGHT, font_size=7.5),
                 _pdf_wrap(f"Rs {r['client_amount']:,.0f}" if r["client_amount"] else "—", align=TA_RIGHT, font_size=7.5),
                 _pdf_wrap((r["status"] or "").upper(), align=TA_CENTER, bold=True, font_size=7.5),
+                _pdf_wrap(r["notes"] or "", font_size=7),
             ])
         t = LongTable(data, colWidths=col_w, repeatRows=1)
         t.setStyle(TableStyle([
@@ -497,7 +500,7 @@ def export_full_db_pdf(banners, payments, filepath):
             ("ROWBACKGROUNDS", (0, 1), (-1, -1),
              [colors.white, colors.HexColor("#F5F3FF")]),
             ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E8E8EC")),
-            ("PADDING", (0, 0), (-1, -1), 5),
+            ("PADDING", (0, 0), (-1, -1), 6),
             ("VALIGN", (0, 1), (-1, -1), "TOP"),
         ]))
         story.append(t)
@@ -542,6 +545,137 @@ def export_full_db_pdf(banners, payments, filepath):
     story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#E8E8EC")))
     story.append(Paragraph(
         f"Modern Printers · Full Export · {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+        ParagraphStyle("footer", fontSize=7, textColor=colors.HexColor("#BCBCCC"),
+                       alignment=TA_CENTER)
+    ))
+    doc.build(story)
+
+
+def export_shop_report_pdf(banners, payments, total_paid, filepath):
+    """Generate a comprehensive shop profit report PDF."""
+    doc = SimpleDocTemplate(
+        filepath, pagesize=A4,
+        leftMargin=2*cm, rightMargin=2*cm,
+        topMargin=2*cm, bottomMargin=2*cm
+    )
+    title_s, subtitle_s, section_s, body_s = _pdf_styles()
+    story = []
+
+    # Header
+    story.append(Paragraph("Modern Printers", title_s))
+    story.append(Paragraph("Shop Profit Report", subtitle_s))
+    story.append(Paragraph(f"Generated: {datetime.now().strftime('%d/%m/%Y %H:%M')}", subtitle_s))
+    story.append(Spacer(1, 0.3*cm))
+    story.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor("#7C3AED")))
+    story.append(Spacer(1, 0.5*cm))
+
+    # Summary calculations
+    total_print_cost = sum(b["amount"] for b in banners)
+    total_client_rev = sum((b["client_amount"] or 0) for b in banners)
+    profit = total_client_rev - total_print_cost
+    balance_due = total_print_cost - total_paid
+    total_sqft = sum(b["sqft"] for b in banners)
+    total_pieces = sum((b["pieces"] or 1) for b in banners)
+    paid_count = sum(1 for b in banners if b["status"] == "paid")
+    pending_count = sum(1 for b in banners if b["status"] == "pending")
+
+    # Overall summary table
+    story.append(Paragraph("Overall Summary", section_s))
+    summary_data = [
+        ["Metric", "Value"],
+        ["Total Jobs", str(len(banners))],
+        ["Total Sq Ft Printed", f"{total_sqft:.1f} sqft"],
+        ["Total Pieces", str(total_pieces)],
+        ["Print Cost (Total)", f"Rs {total_print_cost:,.0f}"],
+        ["Client Revenue", f"Rs {total_client_rev:,.0f}"],
+        ["Net Profit", f"Rs {profit:,.0f}"],
+        ["Profit Margin", f"{(profit/total_client_rev*100):.1f}%" if total_client_rev > 0 else "N/A"],
+    ]
+    st = Table(summary_data, colWidths=[7*cm, 7*cm])
+    st.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#7C3AED")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 9),
+        ("FONTSIZE", (0, 1), (-1, -1), 9),
+        ("TEXTCOLOR", (0, 1), (0, -1), colors.HexColor("#8A8A9A")),
+        ("TEXTCOLOR", (1, 1), (1, -1), colors.HexColor("#1A1A2E")),
+        ("FONTNAME", (1, 1), (1, -1), "Helvetica-Bold"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F5F3FF")]),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E8E8EC")),
+        ("PADDING", (0, 0), (-1, -1), 8),
+    ]))
+    story.append(st)
+    story.append(Spacer(1, 0.5*cm))
+
+    # Payment status
+    story.append(Paragraph("Payment Status", section_s))
+    pay_data = [
+        ["Metric", "Value"],
+        ["Total Paid", f"Rs {total_paid:,.0f}"],
+        ["Balance Due" if balance_due > 0 else "Credit Balance", f"Rs {abs(balance_due):,.0f}"],
+        ["Jobs Paid", f"{paid_count} / {len(banners)}"],
+        ["Jobs Pending", str(pending_count)],
+    ]
+    pt = Table(pay_data, colWidths=[7*cm, 7*cm])
+    pt.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#16A34A")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("TEXTCOLOR", (0, 1), (0, -1), colors.HexColor("#8A8A9A")),
+        ("TEXTCOLOR", (1, 1), (1, -1), colors.HexColor("#16A34A")),
+        ("FONTNAME", (1, 1), (1, -1), "Helvetica-Bold"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F0FDF4")]),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#BBF7D0")),
+        ("PADDING", (0, 0), (-1, -1), 8),
+    ]))
+    story.append(pt)
+    story.append(Spacer(1, 0.5*cm))
+
+    # Monthly breakdown
+    month_data = {}
+    for b in banners:
+        try:
+            dt = datetime.strptime(b["date_sent"][:10], "%Y-%m-%d")
+            mk = dt.strftime("%b %Y")
+            if mk not in month_data:
+                month_data[mk] = {"cost": 0, "revenue": 0, "jobs": 0, "sqft": 0}
+            month_data[mk]["cost"] += b["amount"]
+            month_data[mk]["revenue"] += b["client_amount"] or 0
+            month_data[mk]["jobs"] += 1
+            month_data[mk]["sqft"] += b["sqft"]
+        except:
+            pass
+
+    if month_data:
+        story.append(Paragraph("Monthly Breakdown", section_s))
+        mheader = ["Month", "Jobs", "Sq Ft", "Print Cost", "Revenue", "Profit"]
+        mdata = [mheader]
+        for mk, md in month_data.items():
+            mprofit = md["revenue"] - md["cost"]
+            mdata.append([
+                mk, str(md["jobs"]), f"{md['sqft']:.1f}",
+                f"Rs {md['cost']:,.0f}", f"Rs {md['revenue']:,.0f}",
+                f"Rs {mprofit:,.0f}"
+            ])
+        mt = Table(mdata, colWidths=[2.8*cm, 1.5*cm, 2*cm, 3*cm, 3*cm, 3*cm])
+        mt.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2563EB")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#EFF6FF")]),
+            ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E8E8EC")),
+            ("PADDING", (0, 0), (-1, -1), 6),
+            ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+        ]))
+        story.append(mt)
+
+    story.append(Spacer(1, 0.5*cm))
+    story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#E8E8EC")))
+    story.append(Paragraph(
+        f"Modern Printers · Shop Report · {datetime.now().strftime('%d/%m/%Y %H:%M')}",
         ParagraphStyle("footer", fontSize=7, textColor=colors.HexColor("#BCBCCC"),
                        alignment=TA_CENTER)
     ))
@@ -958,8 +1092,8 @@ class AddBannerForm(tk.Frame):
         # Notes
         tk.Label(body, text="Notes (optional)", font=font(8), bg=C["white"], fg=C["muted"]).grid(
             row=10, column=0, columnspan=3, sticky="w", pady=(6,1))
-        self.notes_entry = tk.Entry(body, font=font(9), relief="flat", bg=C["bg"], fg=C["text"],
-                                    justify="center")
+        self.notes_entry = tk.Text(body, font=font(9), relief="flat", bg=C["bg"], fg=C["text"],
+                                    height=2, wrap="word")
         self.notes_entry.grid(row=11, column=0, columnspan=3, sticky="ew", ipady=4)
 
         body.columnconfigure(0, weight=1)
@@ -986,7 +1120,7 @@ class AddBannerForm(tk.Frame):
 
         # Keyboard: Enter key to submit
         for entry in [self.w_entry, self.h_entry, self.pcs_entry,
-                       self.date_entry, self.notes_entry]:
+                       self.date_entry]:
             entry.bind("<Return>", lambda e: self._add())
 
     def _on_desc_key(self, event=None):
@@ -1097,7 +1231,7 @@ class AddBannerForm(tk.Frame):
             return
         price = float(get_setting("price_per_sqft") or 50)
         amount = round(sqft * price, 2)
-        notes = self.notes_entry.get().strip()
+        notes = self.notes_entry.get("1.0", "end").strip()
         client_name = self.client_name_var.get().strip()
         try:
             client_rate = float(self.client_rate_var.get() or 0)
@@ -1126,7 +1260,7 @@ class AddBannerForm(tk.Frame):
         self.client_rate_var.set("")
         self.client_total_var.set("")
         self.client_name_var.set("")
-        self.notes_entry.delete(0, "end")
+        self.notes_entry.delete("1.0", "end")
         self.date_entry.delete(0, "end")
         self.date_entry.insert(0, today_str())
         self.preview.config(text="Enter size to preview amount", bg=C["bg"], fg=C["muted"])
@@ -1176,7 +1310,8 @@ class PaymentPanel(tk.Frame):
         self.date_entry.insert(0, today_str())
         self.date_entry.grid(row=3, column=0, sticky="ew", ipady=5)
 
-        self.notes = tk.Entry(body, font=font(9), relief="flat", bg=C["bg"], fg=C["text"])
+        self.notes = tk.Text(body, font=font(9), relief="flat", bg=C["bg"], fg=C["text"],
+                             height=2, wrap="word")
         self.notes.grid(row=3, column=1, sticky="ew", ipady=5, padx=(6,0))
 
         body.columnconfigure(0, weight=1)
@@ -1196,7 +1331,6 @@ class PaymentPanel(tk.Frame):
         # Keyboard: Enter key to submit
         self.amt_entry.bind("<Return>", lambda e: self._add_payment())
         self.date_entry.bind("<Return>", lambda e: self._add_payment())
-        self.notes.bind("<Return>", lambda e: self._add_payment())
 
         tk.Frame(self, bg=C["border"], height=1).pack(fill="x")
         hist_hdr = tk.Frame(self, bg=C["white"], pady=6, padx=14)
@@ -1217,14 +1351,14 @@ class PaymentPanel(tk.Frame):
         if not date_paid:
             messagebox.showwarning("Invalid Date", "Enter a valid date (dd/mm/yyyy).")
             return
-        notes = self.notes.get().strip()
+        notes = self.notes.get("1.0", "end").strip()
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with get_db() as conn:
             conn.execute("INSERT INTO payments (amount, date_paid, notes, created_at) VALUES (?,?,?,?)",
                          (amt, date_paid, notes, now))
             conn.commit()
         self.amt_var.set("")
-        self.notes.delete(0, "end")
+        self.notes.delete("1.0", "end")
         # Auto-mark banners
         with get_db() as conn:
             total_paid = conn.execute("SELECT SUM(amount) as s FROM payments").fetchone()["s"] or 0
@@ -1323,11 +1457,11 @@ class PaymentPanel(tk.Frame):
                         if row["amount"] < 0:
                             amt_text = f"−{fmt_rs(abs(row['amount']))}"
                         tk.Label(r, text=amt_text, font=font(9, "bold"),
-                                 bg=C["white"], fg=amt_color, wraplength=130,
+                                 bg=C["white"], fg=amt_color, wraplength=160,
                                  justify="right").pack(side="right", padx=4)
                         if row["notes"]:
                             tk.Label(r, text=row["notes"], font=font(7),
-                                     bg=C["white"], fg=C["muted2"], wraplength=180,
+                                     bg=C["white"], fg=C["muted2"], wraplength=200,
                                      justify="right").pack(side="right", padx=4)
                         tk.Label(r, text=f"    {fmt_date(row['date_paid'])}", font=font(8),
                                  bg=C["white"], fg=C["muted"]).pack(side="left", padx=4)
@@ -1417,9 +1551,15 @@ class ShopProfitPanel(tk.Frame):
         self._arrow_lbl.pack(side="left", padx=(0,4))
         tk.Label(hdr, text="📊  Shop Profit Report", font=font(11, "bold"),
                  bg=C["white"], fg=C["text"]).pack(side="left")
+        dl_btn = tk.Button(hdr, text="📥 Download", font=font(8, "bold"),
+                           bg=C["accent_lt"], fg=C["accent"], relief="flat",
+                           cursor="hand2", padx=8, pady=2, command=self._export_report)
+        dl_btn.pack(side="right", padx=4)
+        hover_btn(dl_btn, C["accent_hv"], C["accent_lt"])
         hdr.bind("<Button-1>", self._toggle)
         for child in hdr.winfo_children():
-            child.bind("<Button-1>", self._toggle)
+            if not isinstance(child, tk.Button):
+                child.bind("<Button-1>", self._toggle)
         tk.Frame(self, bg=C["border"], height=1).pack(fill="x")
 
         self.report_frame = tk.Frame(self, bg=C["white"])
@@ -1567,6 +1707,26 @@ class ShopProfitPanel(tk.Frame):
                     rr.pack(fill="x")
                     tk.Label(rr, text=lbl, font=font(8), bg=C["white"], fg=C["muted"]).pack(side="left", padx=8)
                     tk.Label(rr, text=val, font=font(8, "bold"), bg=C["white"], fg=fg).pack(side="right", padx=8)
+
+    def _export_report(self):
+        """Export the shop profit report as a downloadable PDF."""
+        with get_db() as conn:
+            banners = conn.execute("SELECT * FROM banners ORDER BY date_sent DESC").fetchall()
+            payments = conn.execute("SELECT * FROM payments ORDER BY date_paid DESC").fetchall()
+            total_paid_row = conn.execute("SELECT SUM(amount) as s FROM payments").fetchone()
+        if not banners:
+            messagebox.showinfo("No Data", "No banner records to generate report.")
+            return
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".pdf",
+            filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")],
+            initialfile=f"shop_report_{today_iso()}.pdf"
+        )
+        if not filepath:
+            return
+        total_paid = float(total_paid_row["s"] or 0)
+        export_shop_report_pdf(banners, payments, total_paid, filepath)
+        self.app.show_toast("✓ Shop report exported as PDF")
 
 # ─── Settings Panel ───────────────────────────────────────────────────────────
 
@@ -1910,7 +2070,17 @@ class BannerTable(tk.Frame):
 
         tk.Frame(self, bg=C["border"], height=1).pack(fill="x")
 
-        # Scrollable section (headers + rows)
+        # Column headers (fixed above scroll area)
+        cols_frame = tk.Frame(self, bg=C["bg"], pady=6, padx=10)
+        cols_frame.pack(fill="x")
+        cols = [("#", 3), ("Description", 18), ("Mail Send", 10),
+                ("Size", 9), ("Sq Ft", 7), ("Print Cost", 10), ("Client Rev", 10),
+                ("Status", 8), ("Actions", 12), ("Notes", 13)]
+        for name, w in cols:
+            tk.Label(cols_frame, text=name, font=font(8, "bold"), bg=C["bg"], fg=C["muted"],
+                     width=w, anchor="w").pack(side="left", padx=5)
+
+        # Scrollable rows section
         scroll_wrapper = tk.Frame(self, bg=C["white"])
         scroll_wrapper.pack(fill="both", expand=True)
 
@@ -1924,15 +2094,6 @@ class BannerTable(tk.Frame):
         self.canvas_window = self.canvas.create_window((0, 0), window=self.content_frame, anchor="nw")
         self.content_frame.bind("<Configure>", self._on_rows_configure)
         self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfig(self.canvas_window, width=e.width))
-
-        cols_frame = tk.Frame(self.content_frame, bg=C["bg"], pady=6, padx=10)
-        cols_frame.pack(fill="x")
-        cols = [("#", 4), ("Description", 24), ("Mail Send", 11),
-                ("Size", 10), ("Sq Ft", 8), ("Print Cost", 10), ("Client Rev", 10),
-                ("Status", 9), ("Actions", 15)]
-        for i, (name, w) in enumerate(cols):
-            tk.Label(cols_frame, text=name, font=font(8), bg=C["bg"], fg=C["muted"],
-                     width=w, anchor="w").grid(row=0, column=i, padx=4)
 
         self.rows_frame = tk.Frame(self.content_frame, bg=C["white"])
         self.rows_frame.pack(fill="both", expand=True)
@@ -2093,17 +2254,17 @@ class BannerTable(tk.Frame):
 
         vals = [
             (str(idx), 3, C["muted"], "normal"),
-            ((row["description"] or ""), 24, C["text"], "bold"),
+            ((row["description"] or ""), 18, C["text"], "bold"),
             (fmt_date(row["date_sent"]), 10, C["muted"], "normal"),
             (size_str, 9, C["muted"], "normal"),
             (f"{row['sqft']:.1f}", 7, C["purple"], "bold"),
-            (fmt_rs(row["amount"]), 9, C["accent"], "bold"),
-            (fmt_rs(client_rev) if client_rev else "—", 9, C["orange"], "bold"),
+            (fmt_rs(row["amount"]), 10, C["accent"], "bold"),
+            (fmt_rs(client_rev) if client_rev else "—", 10, C["orange"], "bold"),
         ]
         for text, width, fg, weight in vals:
             lbl = tk.Label(r, text=text, font=font(9, weight), bg=bg,
-                           fg=fg, width=width, anchor="w", padx=4, pady=7,
-                           wraplength=width * 9, justify="left")
+                           fg=fg, width=width, anchor="w", padx=5, pady=7,
+                           wraplength=width * 8, justify="left")
             lbl.pack(side="left")
             lbl.bind("<Enter>", on_enter)
             lbl.bind("<Leave>", on_leave)
@@ -2111,12 +2272,12 @@ class BannerTable(tk.Frame):
         # Status badge
         sbadge = tk.Label(r, text=status.upper(), font=font(7, "bold"),
                           bg=s_bg.get(status, C["bg"]), fg=s_fg.get(status, C["muted"]),
-                          width=8, anchor="center", padx=3, pady=3)
-        sbadge.pack(side="left", padx=2)
+                          width=8, anchor="center", padx=5, pady=3)
+        sbadge.pack(side="left", padx=3)
 
         # Actions
         act = tk.Frame(r, bg=bg)
-        act.pack(side="left", padx=3)
+        act.pack(side="left", padx=5)
         act.bind("<Enter>", on_enter)
         act.bind("<Leave>", on_leave)
 
@@ -2201,9 +2362,15 @@ class BannerTable(tk.Frame):
         del_btn.pack(side="left", padx=1)
         hover_btn(del_btn, C["red_lt"], bg)
 
-        if row["notes"]:
-            tk.Label(r, text=f"📝 {row['notes']}", font=font(7), bg=bg,
-                     fg=C["muted2"], padx=6, wraplength=180, justify="left").pack(side="right")
+        # Notes column
+        notes_text = row["notes"] or ""
+        notes_lbl = tk.Label(r, text=f"📝 {notes_text}" if notes_text else "",
+                             font=font(7), bg=bg, fg=C["muted2"],
+                             width=13, anchor="w", padx=5,
+                             wraplength=100, justify="left")
+        notes_lbl.pack(side="left")
+        notes_lbl.bind("<Enter>", on_enter)
+        notes_lbl.bind("<Leave>", on_leave)
 
 # ─── Edit Banner Dialog ───────────────────────────────────────────────────────
 
@@ -2253,9 +2420,9 @@ class EditBannerDialog(tk.Toplevel):
         body.pack(fill="x", padx=20, pady=10)
 
         tk.Label(body, text="Description", font=font(8), bg=C["white"], fg=C["muted"]).grid(row=0, column=0, columnspan=2, sticky="w")
-        self.desc = tk.Entry(body, font=font(10), relief="flat", bg=C["bg"], fg=C["text"],
-                             justify="center")
-        self.desc.insert(0, self.row["description"] or "")
+        self.desc = tk.Text(body, font=font(10), relief="flat", bg=C["bg"], fg=C["text"],
+                            height=2, wrap="word")
+        self.desc.insert("1.0", self.row["description"] or "")
         self.desc.grid(row=1, column=0, columnspan=2, sticky="ew", ipady=5, pady=(0,6))
 
         tk.Label(body, text="W (ft)", font=font(8), bg=C["white"], fg=C["muted"]).grid(row=2, column=0, sticky="w")
@@ -2301,9 +2468,9 @@ class EditBannerDialog(tk.Toplevel):
         self.date_entry.grid(row=11, column=0, columnspan=2, sticky="ew", ipady=5, pady=(0,6))
 
         tk.Label(body, text="Notes", font=font(8), bg=C["white"], fg=C["muted"]).grid(row=12, column=0, columnspan=2, sticky="w")
-        self.notes = tk.Entry(body, font=font(9), relief="flat", bg=C["bg"], fg=C["text"],
-                              justify="center")
-        self.notes.insert(0, self.row["notes"] or "")
+        self.notes = tk.Text(body, font=font(9), relief="flat", bg=C["bg"], fg=C["text"],
+                             height=2, wrap="word")
+        self.notes.insert("1.0", self.row["notes"] or "")
         self.notes.grid(row=13, column=0, columnspan=2, sticky="ew", ipady=4)
 
         body.columnconfigure(0, weight=1)
@@ -2361,8 +2528,8 @@ class EditBannerDialog(tk.Toplevel):
             conn.execute("""UPDATE banners SET description=?, width_ft=?, height_ft=?, pieces=?,
                             sqft=?, amount=?, custom_amount=?, date_sent=?, notes=?,
                             client_rate=?, client_amount=? WHERE id=?""",
-                         (self.desc.get().strip(), w, h, pcs, sqft, amount, is_custom,
-                          date_sent, self.notes.get().strip(),
+                          (self.desc.get("1.0", "end").strip(), w, h, pcs, sqft, amount, is_custom,
+                          date_sent, self.notes.get("1.0", "end").strip(),
                           client_rate, client_amt, self.row["id"]))
             conn.commit()
         self.app.refresh()
