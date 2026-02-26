@@ -6,8 +6,9 @@ Data stored in: ~/banner_tracker.db (SQLite)
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox, simpledialog, filedialog
 import sqlite3
+import csv
 import os
 from datetime import datetime, date, timedelta
 from pathlib import Path
@@ -147,6 +148,11 @@ def today_str():
 
 def today_iso():
     return date.today().strftime("%Y-%m-%d")
+
+def hover_btn(btn, hover_bg, normal_bg):
+    """Bind hover effects to a button for better visual feedback."""
+    btn.bind("<Enter>", lambda e: btn.config(bg=hover_bg))
+    btn.bind("<Leave>", lambda e: btn.config(bg=normal_bg))
 
 # ─── Auto-mark banners paid by amount ─────────────────────────────────────────
 
@@ -524,6 +530,7 @@ class AddBannerForm(tk.Frame):
                         activebackground="#1d4ed8", activeforeground="white",
                         cursor="hand2", pady=8, command=self._add)
         btn.pack(fill="x", padx=14, pady=10)
+        hover_btn(btn, "#1d4ed8", C["accent"])
 
         self.success_label = tk.Label(self, text="", font=font(9, "bold"),
                                       bg=C["white"], fg=C["green"], pady=0)
@@ -706,6 +713,7 @@ class PaymentPanel(tk.Frame):
                         activebackground="#15803d", activeforeground="white",
                         cursor="hand2", pady=7, command=self._add_payment)
         btn.pack(fill="x", padx=14, pady=(2, 8))
+        hover_btn(btn, "#15803d", C["green"])
 
         self.success_label = tk.Label(self, text="", font=font(9, "bold"),
                                       bg=C["white"], fg=C["green"], pady=0)
@@ -864,10 +872,12 @@ class ComparePanel(tk.Frame):
         self.bill_var = tk.StringVar()
         tk.Entry(row, textvariable=self.bill_var, font=font(12, "bold"), relief="flat",
                  bg=C["bg"], fg=C["text"], justify="center").pack(side="left", ipady=5, expand=True, fill="x")
-        tk.Button(row, text="CHECK", font=font(9, "bold"), bg=C["orange"], fg="white",
+        chk_btn = tk.Button(row, text="CHECK", font=font(9, "bold"), bg=C["orange"], fg="white",
                   relief="flat", cursor="hand2", padx=10, pady=5,
                   activebackground="#b45309", activeforeground="white",
-                  command=self._compare).pack(side="right", padx=(8,0))
+                  command=self._compare)
+        chk_btn.pack(side="right", padx=(8,0))
+        hover_btn(chk_btn, "#b45309", C["orange"])
 
         self.result_frame = tk.Frame(self, bg=C["white"])
         self.result_frame.pack(fill="x", padx=14, pady=(0, 8))
@@ -1025,6 +1035,34 @@ class SettingsPanel(tk.Frame):
                   bg=C["accent_lt"], fg=C["accent"], relief="flat",
                   cursor="hand2", pady=6, command=self._save).pack(fill="x", padx=14, pady=8)
 
+        # ── Data Management ──
+        tk.Frame(self, bg=C["border"], height=1).pack(fill="x")
+        dm_hdr = tk.Frame(self, bg=C["white"], pady=6, padx=14)
+        dm_hdr.pack(fill="x")
+        tk.Label(dm_hdr, text="🗑️  Data Management", font=font(9, "bold"),
+                 bg=C["white"], fg=C["muted"]).pack(side="left")
+
+        dm_body = tk.Frame(self, bg=C["white"])
+        dm_body.pack(fill="x", padx=14, pady=(0, 8))
+
+        clr_rec_btn = tk.Button(dm_body, text="Clear All Banner Records", font=font(8, "bold"),
+                  bg=C["orange_lt"], fg=C["orange"], relief="flat",
+                  cursor="hand2", pady=5, command=self._clear_banners)
+        clr_rec_btn.pack(fill="x", pady=(0, 4))
+        hover_btn(clr_rec_btn, "#FDE68A", C["orange_lt"])
+
+        clr_pay_btn = tk.Button(dm_body, text="Clear All Payments", font=font(8, "bold"),
+                  bg=C["orange_lt"], fg=C["orange"], relief="flat",
+                  cursor="hand2", pady=5, command=self._clear_payments)
+        clr_pay_btn.pack(fill="x", pady=(0, 4))
+        hover_btn(clr_pay_btn, "#FDE68A", C["orange_lt"])
+
+        clr_all_btn = tk.Button(dm_body, text="⚠  Reset Entire Database", font=font(8, "bold"),
+                  bg=C["red_lt"], fg=C["red"], relief="flat",
+                  cursor="hand2", pady=5, command=self._clear_all)
+        clr_all_btn.pack(fill="x")
+        hover_btn(clr_all_btn, "#FECACA", C["red_lt"])
+
     def _save(self):
         try:
             days = int(self.reminder_var.get())
@@ -1038,6 +1076,64 @@ class SettingsPanel(tk.Frame):
             pass
         self.app.refresh()
         messagebox.showinfo("Saved", "Settings saved successfully.")
+
+    def _clear_banners(self):
+        with get_db() as conn:
+            count = conn.execute("SELECT COUNT(*) as c FROM banners").fetchone()["c"]
+        if count == 0:
+            messagebox.showinfo("Nothing to Clear", "There are no banner records to clear.")
+            return
+        if messagebox.askyesno("Clear Banner Records",
+                               f"This will permanently delete all {count} banner record(s).\n\n"
+                               "Are you sure?"):
+            if messagebox.askyesno("Final Confirmation",
+                                   f"⚠️  FINAL WARNING: Delete ALL {count} banner records?\n\n"
+                                   "This action CANNOT be undone!"):
+                with get_db() as conn:
+                    conn.execute("DELETE FROM banners")
+                    conn.commit()
+                self.app.refresh()
+                messagebox.showinfo("Cleared", f"All {count} banner record(s) have been deleted.")
+
+    def _clear_payments(self):
+        with get_db() as conn:
+            count = conn.execute("SELECT COUNT(*) as c FROM payments").fetchone()["c"]
+        if count == 0:
+            messagebox.showinfo("Nothing to Clear", "There are no payment records to clear.")
+            return
+        if messagebox.askyesno("Clear Payments",
+                               f"This will permanently delete all {count} payment record(s).\n\n"
+                               "Are you sure?"):
+            if messagebox.askyesno("Final Confirmation",
+                                   f"⚠️  FINAL WARNING: Delete ALL {count} payment records?\n\n"
+                                   "This action CANNOT be undone!"):
+                with get_db() as conn:
+                    conn.execute("DELETE FROM payments")
+                    conn.commit()
+                self.app.refresh()
+                messagebox.showinfo("Cleared", f"All {count} payment record(s) have been deleted.")
+
+    def _clear_all(self):
+        with get_db() as conn:
+            b_count = conn.execute("SELECT COUNT(*) as c FROM banners").fetchone()["c"]
+            p_count = conn.execute("SELECT COUNT(*) as c FROM payments").fetchone()["c"]
+        if b_count == 0 and p_count == 0:
+            messagebox.showinfo("Nothing to Clear", "The database is already empty.")
+            return
+        if messagebox.askyesno("Reset Entire Database",
+                               f"This will permanently delete:\n"
+                               f"  • {b_count} banner record(s)\n"
+                               f"  • {p_count} payment record(s)\n\n"
+                               "Are you sure?"):
+            if messagebox.askyesno("Final Confirmation",
+                                   "⚠️  FINAL WARNING: This will ERASE ALL DATA!\n\n"
+                                   "This action CANNOT be undone!"):
+                with get_db() as conn:
+                    conn.execute("DELETE FROM banners")
+                    conn.execute("DELETE FROM payments")
+                    conn.commit()
+                self.app.refresh()
+                messagebox.showinfo("Database Reset", "All data has been cleared.")
 
 # ─── Banner Table ─────────────────────────────────────────────────────────────
 
@@ -1059,6 +1155,9 @@ class BannerTable(tk.Frame):
         tk.Label(hdr, text="All Banner Jobs", font=font(13, "bold"),
                  bg=C["white"], fg=C["text"]).pack(side="left")
 
+        self.count_label = tk.Label(hdr, text="", font=font(9), bg=C["white"], fg=C["muted"])
+        self.count_label.pack(side="left", padx=(8, 0))
+
         # Search box
         self.search_entry = tk.Entry(hdr, font=font(9), relief="flat",
                                      bg=C["bg"], fg=C["text"], width=16,
@@ -1072,6 +1171,13 @@ class BannerTable(tk.Frame):
         # Filter buttons
         fbar = tk.Frame(hdr, bg=C["white"])
         fbar.pack(side="right")
+
+        export_btn = tk.Button(fbar, text="📥 Export CSV", font=font(8), bg=C["accent_lt"],
+                    fg=C["accent"], relief="flat", cursor="hand2", padx=8, pady=3,
+                    command=self._export_csv)
+        export_btn.pack(side="left", padx=(0, 8))
+        hover_btn(export_btn, "#DBEAFE", C["accent_lt"])
+
         self.filter_btns = {}
         for label, key in [("All","all"),("Pending","pending"),("Partial","partial"),("Paid","paid")]:
             btn = tk.Button(fbar, text=label, font=font(8, "bold"), relief="flat",
@@ -1174,6 +1280,35 @@ class BannerTable(tk.Frame):
         self.to_var.set("")
         self.refresh()
 
+    def _export_csv(self):
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            initialfile=f"banner_jobs_{today_iso()}.csv"
+        )
+        if not filepath:
+            return
+        with get_db() as conn:
+            rows = conn.execute(
+                "SELECT id, description, client_name, date_sent, width_ft, height_ft, "
+                "pieces, sqft, price_per_sqft, amount, client_rate, client_amount, "
+                "status, notes FROM banners ORDER BY date_sent DESC, id DESC"
+            ).fetchall()
+        with open(filepath, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["ID", "Description", "Client", "Date Sent", "Width (ft)",
+                             "Height (ft)", "Pieces", "Sq Ft", "Price/SqFt",
+                             "Print Cost", "Client Rate", "Client Amount",
+                             "Status", "Notes"])
+            for row in rows:
+                writer.writerow([row["id"], row["description"], row["client_name"],
+                                 fmt_date(row["date_sent"]), row["width_ft"],
+                                 row["height_ft"], row["pieces"], row["sqft"],
+                                 row["price_per_sqft"], row["amount"],
+                                 row["client_rate"], row["client_amount"],
+                                 row["status"], row["notes"]])
+        messagebox.showinfo("Exported", f"Successfully exported {len(rows)} records to:\n{filepath}")
+
     def _highlight_filter(self):
         for k, btn in self.filter_btns.items():
             btn.config(bg=C["accent"] if k == self.filter_status else C["bg"],
@@ -1194,6 +1329,7 @@ class BannerTable(tk.Frame):
         for key, btn in self.filter_btns.items():
             btn.config(text=f"{label_map[key]} ({count_map[key]})")
         self._highlight_filter()
+        self.count_label.config(text=f"({total_count} total)")
 
         query = "SELECT * FROM banners"
         params = []
@@ -1297,6 +1433,14 @@ class BannerTable(tk.Frame):
                 self.app.refresh()
             return do
 
+        def make_pending(rid):
+            def do():
+                with get_db() as conn:
+                    conn.execute("UPDATE banners SET status='pending' WHERE id=?", (rid,))
+                    conn.commit()
+                self.app.refresh()
+            return do
+
         def make_del(rid):
             def do():
                 if messagebox.askyesno("Delete", "Remove this banner record?"):
@@ -1311,18 +1455,57 @@ class BannerTable(tk.Frame):
                 EditBannerDialog(self.app, rrow)
             return do
 
+        def make_dup(rrow):
+            def do():
+                price = float(get_setting("price_per_sqft") or 50)
+                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                with get_db() as conn:
+                    conn.execute(
+                        """INSERT INTO banners
+                           (description, width_ft, height_ft, pieces, sqft, price_per_sqft,
+                            amount, custom_amount, date_sent, date_added, status, notes,
+                            client_name, client_rate, client_amount)
+                           VALUES (?,?,?,?,?,?,?,0,?,?,?,?,?,?,?)""",
+                        (rrow["description"], rrow["width_ft"], rrow["height_ft"],
+                         rrow["pieces"], rrow["sqft"], rrow["price_per_sqft"],
+                         rrow["amount"], today_iso(), now, "pending",
+                         rrow["notes"], rrow["client_name"], rrow["client_rate"],
+                         rrow["client_amount"])
+                    )
+                    conn.commit()
+                self.app.refresh()
+            return do
+
         if status != "paid":
-            tk.Button(act, text="✓ Paid", font=font(8), bg=C["green_lt"], fg=C["green"],
+            paid_btn = tk.Button(act, text="✓ Paid", font=font(8), bg=C["green_lt"], fg=C["green"],
                       relief="flat", cursor="hand2", padx=4, pady=1,
-                      command=make_paid(row["id"])).pack(side="left", padx=1)
+                      command=make_paid(row["id"]))
+            paid_btn.pack(side="left", padx=1)
+            hover_btn(paid_btn, "#BBF7D0", C["green_lt"])
+        else:
+            pend_btn = tk.Button(act, text="↩ Pending", font=font(8), bg=C["orange_lt"], fg=C["orange"],
+                      relief="flat", cursor="hand2", padx=4, pady=1,
+                      command=make_pending(row["id"]))
+            pend_btn.pack(side="left", padx=1)
+            hover_btn(pend_btn, "#FDE68A", C["orange_lt"])
 
-        tk.Button(act, text="✏️", font=font(8), bg=bg, fg=C["muted"],
+        edit_btn = tk.Button(act, text="✏️", font=font(8), bg=bg, fg=C["muted"],
                   relief="flat", cursor="hand2", padx=3, pady=1,
-                  command=make_edit(row)).pack(side="left", padx=1)
+                  command=make_edit(row))
+        edit_btn.pack(side="left", padx=1)
+        hover_btn(edit_btn, C["accent_lt"], bg)
 
-        tk.Button(act, text="✕", font=font(8), bg=bg, fg=C["muted2"],
+        dup_btn = tk.Button(act, text="📋", font=font(8), bg=bg, fg=C["muted"],
                   relief="flat", cursor="hand2", padx=3, pady=1,
-                  command=make_del(row["id"])).pack(side="left", padx=1)
+                  command=make_dup(row))
+        dup_btn.pack(side="left", padx=1)
+        hover_btn(dup_btn, C["accent_lt"], bg)
+
+        del_btn = tk.Button(act, text="✕", font=font(8), bg=bg, fg=C["muted2"],
+                  relief="flat", cursor="hand2", padx=3, pady=1,
+                  command=make_del(row["id"]))
+        del_btn.pack(side="left", padx=1)
+        hover_btn(del_btn, C["red_lt"], bg)
 
         if row["notes"]:
             tk.Label(r, text=f"📝 {row['notes']}", font=font(7), bg=bg,
@@ -1392,9 +1575,11 @@ class EditBannerDialog(tk.Toplevel):
         body.columnconfigure(1, weight=1)
 
         tk.Frame(self, bg=C["border"], height=1).pack(fill="x", pady=(6,0))
-        tk.Button(self, text="SAVE CHANGES", font=font(10, "bold"),
+        save_btn = tk.Button(self, text="SAVE CHANGES", font=font(10, "bold"),
                   bg=C["accent"], fg="white", relief="flat",
-                  cursor="hand2", pady=8, command=self._save).pack(fill="x", padx=20, pady=12)
+                  cursor="hand2", pady=8, command=self._save)
+        save_btn.pack(fill="x", padx=20, pady=12)
+        hover_btn(save_btn, "#1d4ed8", C["accent"])
 
     def _save(self):
         try:
