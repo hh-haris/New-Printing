@@ -15,7 +15,7 @@ pip install reportlab pillow
 
 ### Core
 - **Sidebar is fully scrollable** — all panels accessible by scrolling
-- **Banner table scroll** — only scrolls rows, not headers/filters
+- **Banner section scroll** — banner jobs section scrolls smoothly with clearer column spacing
 - **Date format** is dd/mm/yyyy throughout (labeled "Mail Send")
 
 ### Banner Jobs
