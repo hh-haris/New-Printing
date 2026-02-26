@@ -10,8 +10,10 @@ from tkinter import ttk, messagebox, simpledialog, filedialog
 import sqlite3
 import csv
 import os
+import sys
 from datetime import datetime, date, timedelta
 from pathlib import Path
+from functools import partial
 from reportlab.lib.pagesizes import A4, letter
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -128,7 +130,7 @@ C = {
     "hover":     "#F0F4FF",
 }
 
-FONT_FAMILY = "Segoe UI" if os.name == "nt" else "SF Pro Display" if "darwin" in os.sys.platform else "Ubuntu"
+FONT_FAMILY = "Segoe UI" if os.name == "nt" else "SF Pro Display" if sys.platform == "darwin" else "Ubuntu"
 
 def font(size=10, weight="normal"):
     return (FONT_FAMILY, size, weight)
@@ -145,14 +147,14 @@ def fmt_date(d):
         return d
 
 def parse_date(s):
-    """Accept dd/mm/yyyy or yyyy-mm-dd"""
+    """Accept dd/mm/yyyy or yyyy-mm-dd. Returns None if no format matches."""
     s = s.strip()
     for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
         try:
             return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
-        except:
+        except ValueError:
             pass
-    return s
+    return None
 
 def today_str():
     return date.today().strftime("%d/%m/%Y")
@@ -168,8 +170,8 @@ def hover_btn(btn, hover_bg, normal_bg):
 # ─── Auto-mark banners paid by amount ─────────────────────────────────────────
 
 def auto_mark_paid(total_paid):
-    """Mark banners as paid oldest-first up to total_paid amount."""
-    price = float(get_setting("price_per_sqft") or 50)
+    """Mark banners as paid oldest-first up to total_paid amount.
+    Resets remaining banners to pending so deleted payments revert status."""
     with get_db() as conn:
         banners = conn.execute(
             "SELECT id, amount, status FROM banners ORDER BY date_sent ASC, id ASC"
@@ -177,15 +179,14 @@ def auto_mark_paid(total_paid):
         remaining = total_paid
         for b in banners:
             amt = b["amount"] if b["amount"] else 0
-            if remaining <= 0:
-                # Mark rest as pending if previously paid by auto
-                break
-            if remaining >= amt:
+            if remaining >= amt and amt > 0:
                 conn.execute("UPDATE banners SET status='paid' WHERE id=?", (b["id"],))
                 remaining -= amt
-            else:
+            elif remaining > 0 and amt > 0:
                 conn.execute("UPDATE banners SET status='partial' WHERE id=?", (b["id"],))
                 remaining = 0
+            else:
+                conn.execute("UPDATE banners SET status='pending' WHERE id=?", (b["id"],))
         conn.commit()
 
 def get_client_names():
@@ -1040,6 +1041,9 @@ class PaymentPanel(tk.Frame):
             messagebox.showwarning("Invalid Amount", "Enter a valid payment amount.")
             return
         date_paid = parse_date(self.date_entry.get())
+        if not date_paid:
+            messagebox.showwarning("Invalid Date", "Enter a valid date (dd/mm/yyyy).")
+            return
         notes = self.notes.get().strip()
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with get_db() as conn:
@@ -1789,8 +1793,8 @@ class BannerTable(tk.Frame):
         self.refresh()
 
     def _apply_date_filter(self):
-        self.filter_from = parse_date(self.from_var.get()) if self.from_var.get().strip() else ""
-        self.filter_to = parse_date(self.to_var.get()) if self.to_var.get().strip() else ""
+        self.filter_from = (parse_date(self.from_var.get()) or "") if self.from_var.get().strip() else ""
+        self.filter_to = (parse_date(self.to_var.get()) or "") if self.to_var.get().strip() else ""
         self.refresh()
 
     def _clear_date_filter(self):
@@ -2008,8 +2012,9 @@ class EditBannerDialog(tk.Toplevel):
         self.app = app
         self.row = row
         self.title("Edit Banner")
-        self.geometry("380x480")
-        self.resizable(False, False)
+        self.geometry("420x580")
+        self.resizable(True, True)
+        self.minsize(380, 480)
         self.configure(bg=C["white"])
         self.grab_set()
         self._build()
@@ -2019,7 +2024,24 @@ class EditBannerDialog(tk.Toplevel):
                  bg=C["white"], fg=C["text"]).pack(pady=(16,4), padx=20, anchor="w")
         tk.Frame(self, bg=C["border"], height=1).pack(fill="x")
 
-        body = tk.Frame(self, bg=C["white"])
+        # Scrollable body
+        scroll_wrapper = tk.Frame(self, bg=C["white"])
+        scroll_wrapper.pack(fill="both", expand=True)
+        canvas = tk.Canvas(scroll_wrapper, bg=C["white"], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(scroll_wrapper, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        inner = tk.Frame(canvas, bg=C["white"])
+        canvas_win = canvas.create_window((0, 0), window=inner, anchor="nw")
+        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(canvas_win, width=e.width))
+        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>",
+            lambda ev: canvas.yview_scroll(-1 * (ev.delta // 120), "units")))
+        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
+
+        body = tk.Frame(inner, bg=C["white"])
         body.pack(fill="x", padx=20, pady=10)
 
         tk.Label(body, text="Description", font=font(8), bg=C["white"], fg=C["muted"]).grid(row=0, column=0, columnspan=2, sticky="w")
@@ -2052,16 +2074,29 @@ class EditBannerDialog(tk.Toplevel):
         tk.Entry(body, textvariable=self.client_amt_var, font=font(10), relief="flat",
                  bg=C["bg"], fg=C["green"], justify="center").grid(row=7, column=0, columnspan=2, sticky="ew", ipady=5, pady=(0,6))
 
-        tk.Label(body, text="Mail Send (dd/mm/yyyy)", font=font(8), bg=C["white"], fg=C["muted"]).grid(row=8, column=0, columnspan=2, sticky="w")
+        # Custom amount checkbox
+        self.custom_amount_var = tk.IntVar(value=self.row["custom_amount"] or 0)
+        tk.Label(body, text="Print Cost (Rs)", font=font(8), bg=C["white"], fg=C["muted"]).grid(row=8, column=0, sticky="w")
+        self.amount_var = tk.StringVar(value=str(self.row["amount"] or ""))
+        self.amount_entry = tk.Entry(body, textvariable=self.amount_var, font=font(10), relief="flat",
+                 bg=C["bg"], fg=C["accent"], justify="center")
+        self.amount_entry.grid(row=9, column=0, sticky="ew", ipady=5, pady=(0,6))
+        cb = tk.Checkbutton(body, text="Custom price", variable=self.custom_amount_var,
+                            font=font(8), bg=C["white"], fg=C["muted"],
+                            activebackground=C["white"], command=self._toggle_custom_amount)
+        cb.grid(row=8, column=1, sticky="w", padx=(8,0))
+        self._toggle_custom_amount()
+
+        tk.Label(body, text="Mail Send (dd/mm/yyyy)", font=font(8), bg=C["white"], fg=C["muted"]).grid(row=10, column=0, columnspan=2, sticky="w")
         self.date_entry = tk.Entry(body, font=font(10), relief="flat", bg=C["bg"], fg=C["text"], justify="center")
         self.date_entry.insert(0, fmt_date(self.row["date_sent"]))
-        self.date_entry.grid(row=9, column=0, columnspan=2, sticky="ew", ipady=5, pady=(0,6))
+        self.date_entry.grid(row=11, column=0, columnspan=2, sticky="ew", ipady=5, pady=(0,6))
 
-        tk.Label(body, text="Notes", font=font(8), bg=C["white"], fg=C["muted"]).grid(row=10, column=0, columnspan=2, sticky="w")
+        tk.Label(body, text="Notes", font=font(8), bg=C["white"], fg=C["muted"]).grid(row=12, column=0, columnspan=2, sticky="w")
         self.notes = tk.Entry(body, font=font(9), relief="flat", bg=C["bg"], fg=C["text"],
                               justify="center")
         self.notes.insert(0, self.row["notes"] or "")
-        self.notes.grid(row=11, column=0, columnspan=2, sticky="ew", ipady=4)
+        self.notes.grid(row=13, column=0, columnspan=2, sticky="ew", ipady=4)
 
         body.columnconfigure(0, weight=1)
         body.columnconfigure(1, weight=1)
@@ -2073,6 +2108,12 @@ class EditBannerDialog(tk.Toplevel):
         save_btn.pack(fill="x", padx=20, pady=12)
         hover_btn(save_btn, "#1d4ed8", C["accent"])
 
+    def _toggle_custom_amount(self):
+        if self.custom_amount_var.get():
+            self.amount_entry.config(state="normal", bg=C["bg"])
+        else:
+            self.amount_entry.config(state="disabled", bg=C["border"])
+
     def _save(self):
         try:
             w = float(self.w_var.get())
@@ -2080,11 +2121,22 @@ class EditBannerDialog(tk.Toplevel):
             pcs = max(1, int(self.pcs_var.get() or 1))
             sqft = round(w * h * pcs, 2)
             price = self.row["price_per_sqft"] or float(get_setting("price_per_sqft") or 50)
-            amount = round(sqft * price, 2)
         except:
             messagebox.showwarning("Invalid", "Check width, height, pieces values.")
             return
+        is_custom = self.custom_amount_var.get()
+        if is_custom:
+            try:
+                amount = float(self.amount_var.get() or 0)
+            except:
+                messagebox.showwarning("Invalid", "Enter a valid custom amount.")
+                return
+        else:
+            amount = round(sqft * price, 2)
         date_sent = parse_date(self.date_entry.get())
+        if not date_sent:
+            messagebox.showwarning("Invalid Date", "Enter a valid date (dd/mm/yyyy).")
+            return
         try:
             client_amt = float(self.client_amt_var.get() or 0)
         except:
@@ -2099,10 +2151,10 @@ class EditBannerDialog(tk.Toplevel):
             client_rate = round(client_amt / sqft, 2)
         with get_db() as conn:
             conn.execute("""UPDATE banners SET description=?, width_ft=?, height_ft=?, pieces=?,
-                            sqft=?, amount=?, date_sent=?, notes=?,
+                            sqft=?, amount=?, custom_amount=?, date_sent=?, notes=?,
                             client_rate=?, client_amount=? WHERE id=?""",
-                         (self.desc.get().strip(), w, h, pcs, sqft, amount, date_sent,
-                          self.notes.get().strip(),
+                         (self.desc.get().strip(), w, h, pcs, sqft, amount, is_custom,
+                          date_sent, self.notes.get().strip(),
                           client_rate, client_amt, self.row["id"]))
             conn.commit()
         self.app.refresh()
