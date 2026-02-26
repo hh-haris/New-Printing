@@ -171,6 +171,23 @@ def auto_mark_paid(total_paid):
                 remaining = 0
         conn.commit()
 
+def get_client_names():
+    """Get unique client names from past banner jobs."""
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT client_name FROM banners WHERE client_name != '' ORDER BY client_name"
+        ).fetchall()
+    return [r["client_name"] for r in rows]
+
+def get_last_client_rate(client_name):
+    """Get the last used client rate for a given client."""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT client_rate FROM banners WHERE client_name=? AND client_rate > 0 ORDER BY id DESC LIMIT 1",
+            (client_name,)
+        ).fetchone()
+    return row["client_rate"] if row else None
+
 # ─── Main Application ─────────────────────────────────────────────────────────
 
 class BannerTrackerApp(tk.Tk):
@@ -181,6 +198,8 @@ class BannerTrackerApp(tk.Tk):
         self.geometry("1280x860")
         self.minsize(960, 680)
         self.configure(bg=C["bg"])
+        style = ttk.Style(self)
+        style.configure('TCombobox', fieldbackground=C["bg"])
         self.price_var = tk.DoubleVar(value=float(get_setting("price_per_sqft") or 50))
         self._build_ui()
         self.refresh()
@@ -428,12 +447,13 @@ class AddBannerForm(tk.Frame):
                                 bg=C["bg"], fg=C["text"], width=6, justify="center")
         self.pcs_entry = tk.Entry(body, textvariable=self.pcs_var, font=font(10), relief="flat",
                                   bg=C["bg"], fg=C["text"], width=4, justify="center")
-        self.client_entry = tk.Entry(body, textvariable=self.client_var, font=font(9), relief="flat",
-                                     bg=C["bg"], fg=C["text"], width=8)
+        self.client_entry = ttk.Combobox(body, textvariable=self.client_var, font=font(9),
+                                         width=8, values=get_client_names())
         self.w_entry.grid(row=3, column=0, sticky="ew", ipady=5)
         self.h_entry.grid(row=3, column=1, sticky="ew", ipady=5, padx=(6,0))
         self.pcs_entry.grid(row=3, column=2, sticky="ew", ipady=5, padx=(6,0))
         self.client_entry.grid(row=3, column=3, sticky="ew", ipady=5, padx=(6,0))
+        self.client_entry.bind("<<ComboboxSelected>>", self._on_client_selected)
 
         self.w_var.trace_add("write", lambda *a: self._update_preview())
         self.h_var.trace_add("write", lambda *a: self._update_preview())
@@ -478,6 +498,20 @@ class AddBannerForm(tk.Frame):
         body.columnconfigure(2, weight=1)
         body.columnconfigure(3, weight=1)
 
+        # Quick size presets
+        qf = tk.Frame(self, bg=C["white"])
+        qf.pack(fill="x", padx=14, pady=(2, 4))
+        tk.Label(qf, text="Quick sizes:", font=font(7), bg=C["white"], fg=C["muted2"]).pack(side="left")
+        for size_label, sw, sh in [("2×3", 2, 3), ("3×6", 3, 6), ("4×8", 4, 8), ("5×10", 5, 10), ("8×12", 8, 12)]:
+            def make_set(wv, hv):
+                def do():
+                    self.w_var.set(str(wv))
+                    self.h_var.set(str(hv))
+                return do
+            tk.Button(qf, text=size_label, font=font(7), bg=C["bg"], fg=C["muted"],
+                      relief="flat", cursor="hand2", padx=6, pady=1,
+                      command=make_set(sw, sh)).pack(side="left", padx=2)
+
         # Preview
         tk.Frame(self, bg=C["border"], height=1).pack(fill="x")
         self.preview = tk.Label(self, text="Enter size to preview amount",
@@ -490,6 +524,15 @@ class AddBannerForm(tk.Frame):
                         activebackground="#1d4ed8", activeforeground="white",
                         cursor="hand2", pady=8, command=self._add)
         btn.pack(fill="x", padx=14, pady=10)
+
+        self.success_label = tk.Label(self, text="", font=font(9, "bold"),
+                                      bg=C["white"], fg=C["green"], pady=0)
+        self.success_label.pack(fill="x", padx=14)
+
+        # Keyboard: Enter key to submit
+        for entry in [self.desc, self.w_entry, self.h_entry, self.pcs_entry,
+                       self.date_entry, self.notes_entry]:
+            entry.bind("<Return>", lambda e: self._add())
 
     def _clear_ph(self):
         if self.desc.get() == "e.g. Eid Sale Banner":
@@ -596,6 +639,22 @@ class AddBannerForm(tk.Frame):
         self.date_entry.insert(0, today_str())
         self.preview.config(text="Enter size to preview amount", bg=C["bg"], fg=C["muted"])
         self.app.refresh()
+        self._show_success(f"✓ Added: {desc}")
+        self._refresh_client_list()
+
+    def _show_success(self, msg):
+        self.success_label.config(text=msg, bg=C["green_lt"], pady=4)
+        self.after(3000, lambda: self.success_label.config(text="", bg=C["white"], pady=0))
+
+    def _on_client_selected(self, event=None):
+        client = self.client_var.get().strip()
+        if client:
+            rate = get_last_client_rate(client)
+            if rate and not self.client_rate_var.get().strip():
+                self.client_rate_var.set(str(rate))
+
+    def _refresh_client_list(self):
+        self.client_entry['values'] = get_client_names()
 
 # ─── Payment Panel ────────────────────────────────────────────────────────────
 
@@ -648,6 +707,15 @@ class PaymentPanel(tk.Frame):
                         cursor="hand2", pady=7, command=self._add_payment)
         btn.pack(fill="x", padx=14, pady=(2, 8))
 
+        self.success_label = tk.Label(self, text="", font=font(9, "bold"),
+                                      bg=C["white"], fg=C["green"], pady=0)
+        self.success_label.pack(fill="x", padx=14)
+
+        # Keyboard: Enter key to submit
+        self.amt_entry.bind("<Return>", lambda e: self._add_payment())
+        self.date_entry.bind("<Return>", lambda e: self._add_payment())
+        self.notes.bind("<Return>", lambda e: self._add_payment())
+
         tk.Frame(self, bg=C["border"], height=1).pack(fill="x")
         hist_hdr = tk.Frame(self, bg=C["white"], pady=6, padx=14)
         hist_hdr.pack(fill="x")
@@ -677,6 +745,11 @@ class PaymentPanel(tk.Frame):
             total_paid = conn.execute("SELECT SUM(amount) as s FROM payments").fetchone()["s"] or 0
         auto_mark_paid(total_paid)
         self.app.refresh()
+        self._show_success(f"✓ Payment of {fmt_rs(amt)} recorded")
+
+    def _show_success(self, msg):
+        self.success_label.config(text=msg, bg=C["green_lt"], pady=4)
+        self.after(3000, lambda: self.success_label.config(text="", bg=C["white"], pady=0))
 
     def refresh(self):
         for w in self.hist_frame.winfo_children():
@@ -976,6 +1049,7 @@ class BannerTable(tk.Frame):
         self.filter_status = "all"
         self.filter_from = ""
         self.filter_to = ""
+        self.search_text = ""
         self._build()
 
     def _build(self):
@@ -984,6 +1058,16 @@ class BannerTable(tk.Frame):
         hdr.pack(fill="x")
         tk.Label(hdr, text="All Banner Jobs", font=font(13, "bold"),
                  bg=C["white"], fg=C["text"]).pack(side="left")
+
+        # Search box
+        self.search_entry = tk.Entry(hdr, font=font(9), relief="flat",
+                                     bg=C["bg"], fg=C["text"], width=16,
+                                     insertbackground=C["accent"])
+        self.search_entry.pack(side="left", padx=(12, 0), ipady=3)
+        self.search_entry.insert(0, "🔍 Search...")
+        self.search_entry.bind("<FocusIn>", self._search_focus_in)
+        self.search_entry.bind("<FocusOut>", self._search_focus_out)
+        self.search_entry.bind("<KeyRelease>", lambda e: self._on_search())
 
         # Filter buttons
         fbar = tk.Frame(hdr, bg=C["white"])
@@ -1058,6 +1142,21 @@ class BannerTable(tk.Frame):
     def _on_scroll(self, event):
         self.canvas.yview_scroll(-1 * (event.delta // 120), "units")
 
+    def _search_focus_in(self, event):
+        if self.search_entry.get() == "🔍 Search...":
+            self.search_entry.delete(0, "end")
+
+    def _search_focus_out(self, event):
+        if not self.search_entry.get():
+            self.search_entry.insert(0, "🔍 Search...")
+
+    def _on_search(self):
+        text = self.search_entry.get().strip()
+        new_search = text if text != "🔍 Search..." else ""
+        if new_search != self.search_text:
+            self.search_text = new_search
+            self.refresh()
+
     def _set_filter(self, key):
         self.filter_status = key
         self._highlight_filter()
@@ -1084,6 +1183,18 @@ class BannerTable(tk.Frame):
         for w in self.rows_frame.winfo_children():
             w.destroy()
 
+        # Update filter button counts
+        with get_db() as conn:
+            total_count = conn.execute("SELECT COUNT(*) as c FROM banners").fetchone()["c"]
+            pending_count = conn.execute("SELECT COUNT(*) as c FROM banners WHERE status='pending'").fetchone()["c"]
+            partial_count = conn.execute("SELECT COUNT(*) as c FROM banners WHERE status='partial'").fetchone()["c"]
+            paid_count = conn.execute("SELECT COUNT(*) as c FROM banners WHERE status='paid'").fetchone()["c"]
+        count_map = {"all": total_count, "pending": pending_count, "partial": partial_count, "paid": paid_count}
+        label_map = {"all": "All", "pending": "Pending", "partial": "Partial", "paid": "Paid"}
+        for key, btn in self.filter_btns.items():
+            btn.config(text=f"{label_map[key]} ({count_map[key]})")
+        self._highlight_filter()
+
         query = "SELECT * FROM banners"
         params = []
         conditions = []
@@ -1097,6 +1208,9 @@ class BannerTable(tk.Frame):
         if self.filter_to:
             conditions.append("date_sent <= ?")
             params.append(self.filter_to)
+        if self.search_text:
+            conditions.append("(description LIKE ? OR client_name LIKE ? OR notes LIKE ?)")
+            params.extend([f"%{self.search_text}%", f"%{self.search_text}%", f"%{self.search_text}%"])
 
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
@@ -1106,9 +1220,13 @@ class BannerTable(tk.Frame):
             rows = conn.execute(query, params).fetchall()
 
         if not rows:
-            tk.Label(self.rows_frame, text="No banner records found.",
-                     font=font(10), bg=C["white"], fg=C["muted"],
-                     pady=40).pack(expand=True)
+            empty = tk.Frame(self.rows_frame, bg=C["white"])
+            empty.pack(expand=True, pady=40)
+            tk.Label(empty, text="📋", font=font(24), bg=C["white"]).pack()
+            tk.Label(empty, text="No banner jobs found", font=font(11, "bold"),
+                     bg=C["white"], fg=C["text"]).pack(pady=(8, 2))
+            tk.Label(empty, text="Add your first banner job using the form on the left",
+                     font=font(9), bg=C["white"], fg=C["muted"]).pack()
             return
 
         for i, row in enumerate(rows):
