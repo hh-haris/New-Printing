@@ -543,6 +543,7 @@ class BannerTrackerApp(tk.Tk):
         self._build_ui()
         self.refresh()
         self._check_reminders()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _build_ui(self):
         # ── Top Header ──
@@ -557,6 +558,12 @@ class BannerTrackerApp(tk.Tk):
         tk.Label(left_hdr, text="Banner Printing Tracker",
                  font=font(9), bg=C["white"], fg=C["muted"]).pack(anchor="w")
 
+        # Help / keyboard shortcuts button
+        help_btn = tk.Button(header, text="❓", font=font(12), bg=C["white"], fg=C["muted"],
+                             relief="flat", cursor="hand2", command=self._show_shortcuts_help)
+        help_btn.place(relx=1.0, x=-200, y=20, anchor="ne")
+        hover_btn(help_btn, C["accent_lt"], C["white"])
+
         # Right: price setting
         tf = tk.Frame(header, bg=C["white"])
         tf.place(relx=1.0, x=-24, y=18, anchor="ne")
@@ -564,11 +571,17 @@ class BannerTrackerApp(tk.Tk):
         self.price_entry = tk.Entry(tf, textvariable=self.price_var, width=8,
                                     font=font(11, "bold"), relief="flat",
                                     bg=C["accent_lt"], fg=C["accent"],
-                                    insertbackground=C["accent"], justify="center")
+                                    insertbackground=C["accent"], justify="center",
+                                    state="disabled", disabledbackground=C["border"],
+                                    disabledforeground=C["muted"])
         self.price_entry.pack(side="left")
         self.price_entry.bind("<Return>", lambda e: self._save_price())
         self.price_entry.bind("<FocusOut>", lambda e: self._save_price())
-        tk.Label(tf, text="↵ save", font=font(8), bg=C["white"], fg=C["muted2"]).pack(side="left", padx=(4,0))
+        self._price_locked = True
+        self.lock_btn = tk.Button(tf, text="🔒", font=font(9), bg=C["white"], fg=C["muted"],
+                                  relief="flat", cursor="hand2", padx=2,
+                                  command=self._toggle_price_lock)
+        self.lock_btn.pack(side="left", padx=(4,0))
 
         tk.Frame(self, bg=C["border"], height=1).pack(fill="x")
 
@@ -625,6 +638,12 @@ class BannerTrackerApp(tk.Tk):
         self.banner_table = BannerTable(right, self)
         self.banner_table.pack(fill="both", expand=True)
 
+        # ── Keyboard shortcuts ──
+        self.bind_all("<Control-n>", lambda e: self._shortcut_add_form())
+        self.bind_all("<Control-p>", lambda e: self._shortcut_payment())
+        self.bind_all("<Control-f>", lambda e: self._shortcut_search())
+        self.bind_all("<F1>", lambda e: self._show_shortcuts_help())
+
     def _bind_sidebar_scroll(self):
         self._sidebar_canvas.bind_all("<MouseWheel>", self._on_sidebar_scroll)
 
@@ -633,6 +652,59 @@ class BannerTrackerApp(tk.Tk):
 
     def _on_sidebar_scroll(self, event):
         self._sidebar_canvas.yview_scroll(-1 * (event.delta // 120), "units")
+
+    def _shortcut_add_form(self):
+        self._sidebar_canvas.yview_moveto(0)
+        self.add_form.desc.focus_set()
+
+    def _shortcut_payment(self):
+        self.payment_panel.amt_entry.focus_set()
+
+    def _shortcut_search(self):
+        self.banner_table.search_entry.focus_set()
+        if self.banner_table.search_entry.get() == "\U0001f50d Search...":
+            self.banner_table.search_entry.delete(0, "end")
+
+    def _show_shortcuts_help(self):
+        help_win = tk.Toplevel(self)
+        help_win.title("Keyboard Shortcuts")
+        help_win.geometry("320x280")
+        help_win.resizable(False, False)
+        help_win.configure(bg=C["white"])
+        help_win.grab_set()
+        tk.Label(help_win, text="Keyboard Shortcuts", font=font(13, "bold"),
+                 bg=C["white"], fg=C["text"]).pack(pady=(16, 8), padx=20, anchor="w")
+        tk.Frame(help_win, bg=C["border"], height=1).pack(fill="x")
+        shortcuts = [
+            ("Ctrl + N", "Focus Add Banner form"),
+            ("Ctrl + P", "Focus Payment form"),
+            ("Ctrl + F", "Focus Search box"),
+            ("F1", "Show this help"),
+            ("Enter", "Submit current form"),
+            ("Tab", "Move to next field"),
+            ("Shift+Tab", "Move to previous field"),
+        ]
+        body = tk.Frame(help_win, bg=C["white"])
+        body.pack(fill="both", expand=True, padx=20, pady=10)
+        for key, desc in shortcuts:
+            row = tk.Frame(body, bg=C["white"])
+            row.pack(fill="x", pady=2)
+            tk.Label(row, text=key, font=font(9, "bold"), bg=C["accent_lt"],
+                     fg=C["accent"], padx=6, pady=2, width=12, anchor="center").pack(side="left")
+            tk.Label(row, text=desc, font=font(9), bg=C["white"],
+                     fg=C["text"], padx=8).pack(side="left")
+
+    def _toggle_price_lock(self):
+        """Toggle the price entry lock state."""
+        self._price_locked = not self._price_locked
+        if self._price_locked:
+            self.price_entry.config(state="disabled", disabledbackground=C["border"],
+                                    disabledforeground=C["muted"])
+            self.lock_btn.config(text="\U0001f512")
+        else:
+            self.price_entry.config(state="normal", bg=C["accent_lt"], fg=C["accent"])
+            self.lock_btn.config(text="\U0001f513")
+            self.price_entry.focus_set()
 
     def _save_price(self):
         try:
@@ -683,6 +755,35 @@ class BannerTrackerApp(tk.Tk):
         self.payment_panel.refresh()
         self.compare_panel.refresh()
         self.shop_tracker.refresh()
+
+    def _on_close(self):
+        """Confirm before closing if form fields have unsaved data."""
+        has_data = False
+        try:
+            desc = self.add_form.desc.get("1.0", "end").strip()
+            w = self.add_form.w_var.get().strip()
+            h = self.add_form.h_var.get().strip()
+            pay_amt = self.payment_panel.amt_var.get().strip()
+            if desc or w or h or pay_amt:
+                has_data = True
+        except:
+            pass
+        if has_data:
+            if not messagebox.askyesno("Unsaved Data",
+                                        "You have unsaved form data.\nClose anyway?"):
+                return
+        self.destroy()
+
+    def show_toast(self, message, bg=None, fg=None, duration=3000):
+        """Show a non-blocking toast notification at the bottom of the window."""
+        if bg is None:
+            bg = C["green_lt"]
+        if fg is None:
+            fg = C["green"]
+        toast = tk.Label(self, text=message, font=font(10, "bold"),
+                         bg=bg, fg=fg, padx=16, pady=8, anchor="center")
+        toast.place(relx=0.5, rely=1.0, anchor="s", y=-20)
+        self.after(duration, toast.destroy)
 
 # ─── Summary Bar ─────────────────────────────────────────────────────────────
 
@@ -814,20 +915,32 @@ class AddBannerForm(tk.Frame):
         self.client_total_var.trace_add("write", lambda *a: self._update_client_rate())
         self._updating_client = False
 
+        # Client Name (with autocomplete)
+        tk.Label(body, text="Client Name (optional)", font=font(8), bg=C["white"], fg=C["muted"]).grid(
+            row=6, column=0, columnspan=3, sticky="w", pady=(6,1))
+        self.client_name_var = tk.StringVar()
+        self.client_name_entry = tk.Entry(body, textvariable=self.client_name_var, font=font(10),
+                                          relief="flat", bg=C["bg"], fg=C["text"],
+                                          justify="center")
+        self.client_name_entry.grid(row=7, column=0, columnspan=3, sticky="ew", ipady=5)
+        self.client_name_entry.bind("<KeyRelease>", self._on_client_name_key)
+        self.client_name_entry.bind("<FocusOut>", self._on_client_name_select)
+        self._client_listbox = None
+
         # Mail Send date
         tk.Label(body, text="Mail Send (dd/mm/yyyy)", font=font(8), bg=C["white"], fg=C["muted"]).grid(
-            row=6, column=0, columnspan=3, sticky="w", pady=(6,1))
+            row=8, column=0, columnspan=3, sticky="w", pady=(6,1))
         self.date_entry = tk.Entry(body, font=font(10), relief="flat",
                                    bg=C["bg"], fg=C["text"], justify="center")
         self.date_entry.insert(0, today_str())
-        self.date_entry.grid(row=7, column=0, columnspan=3, sticky="ew", ipady=5)
+        self.date_entry.grid(row=9, column=0, columnspan=3, sticky="ew", ipady=5)
 
         # Notes
         tk.Label(body, text="Notes (optional)", font=font(8), bg=C["white"], fg=C["muted"]).grid(
-            row=8, column=0, columnspan=3, sticky="w", pady=(6,1))
+            row=10, column=0, columnspan=3, sticky="w", pady=(6,1))
         self.notes_entry = tk.Entry(body, font=font(9), relief="flat", bg=C["bg"], fg=C["text"],
                                     justify="center")
-        self.notes_entry.grid(row=9, column=0, columnspan=3, sticky="ew", ipady=4)
+        self.notes_entry.grid(row=11, column=0, columnspan=3, sticky="ew", ipady=4)
 
         body.columnconfigure(0, weight=1)
         body.columnconfigure(1, weight=1)
@@ -858,6 +971,44 @@ class AddBannerForm(tk.Frame):
 
     def _on_desc_key(self, event=None):
         self.desc.tag_add("center", "1.0", "end")
+
+    def _on_client_name_key(self, event=None):
+        """Show autocomplete suggestions for client name."""
+        text = self.client_name_var.get().strip()
+        self._close_client_listbox()
+        if len(text) < 1:
+            return
+        names = get_client_names()
+        matches = [n for n in names if text.lower() in n.lower()]
+        if not matches:
+            return
+        self._client_listbox = tk.Listbox(self.client_name_entry.master, font=font(9),
+                                           bg=C["white"], fg=C["text"], relief="solid",
+                                           bd=1, height=min(len(matches), 5))
+        for name in matches:
+            self._client_listbox.insert("end", name)
+        self._client_listbox.grid(row=7, column=0, columnspan=3, sticky="ew")
+        self._client_listbox.lift()
+        self._client_listbox.bind("<<ListboxSelect>>", self._pick_client_name)
+
+    def _pick_client_name(self, event=None):
+        if self._client_listbox:
+            sel = self._client_listbox.curselection()
+            if sel:
+                name = self._client_listbox.get(sel[0])
+                self.client_name_var.set(name)
+                rate = get_last_client_rate(name)
+                if rate:
+                    self.client_rate_var.set(str(rate))
+        self._close_client_listbox()
+
+    def _on_client_name_select(self, event=None):
+        self.after(200, self._close_client_listbox)
+
+    def _close_client_listbox(self):
+        if self._client_listbox:
+            self._client_listbox.destroy()
+            self._client_listbox = None
 
     def _get_sqft(self):
         try:
@@ -927,6 +1078,7 @@ class AddBannerForm(tk.Frame):
         price = float(get_setting("price_per_sqft") or 50)
         amount = round(sqft * price, 2)
         notes = self.notes_entry.get().strip()
+        client_name = self.client_name_var.get().strip()
         try:
             client_rate = float(self.client_rate_var.get() or 0)
         except:
@@ -944,7 +1096,7 @@ class AddBannerForm(tk.Frame):
                     client_name, client_rate, client_amount)
                    VALUES (?,?,?,?,?,?,?,0,?,?,?,?,?,?,?)""",
                 (desc, w, h, pcs, sqft, price, amount, date_sent, now, "pending",
-                 notes, "", client_rate, client_amount)
+                 notes, client_name, client_rate, client_amount)
             )
             conn.commit()
         self.desc.delete("1.0", "end")
@@ -953,6 +1105,7 @@ class AddBannerForm(tk.Frame):
         self.pcs_var.set("1")
         self.client_rate_var.set("")
         self.client_total_var.set("")
+        self.client_name_var.set("")
         self.notes_entry.delete(0, "end")
         self.date_entry.delete(0, "end")
         self.date_entry.insert(0, today_str())
@@ -1217,8 +1370,12 @@ class ComparePanel(tk.Frame):
         else:
             bg, fg, msg = C["green_lt"], C["green"], f"ℹ️  Shop less by {fmt_rs(abs(diff))}\nYours: {fmt_rs(my_total)}  |  Shop: {fmt_rs(shop_bill)}"
 
-        tk.Label(self.result_frame, text=msg, font=font(9), bg=bg, fg=fg,
-                 justify="left", anchor="w", padx=10, pady=8, wraplength=300).pack(fill="x")
+        result_lbl = tk.Label(self.result_frame, text=msg, font=font(9), bg=bg, fg=fg,
+                 justify="left", anchor="w", padx=10, pady=8)
+        result_lbl.pack(fill="x")
+        def _update_wraplength(event):
+            result_lbl.config(wraplength=max(event.width - 20, 100))
+        self.result_frame.bind("<Configure>", _update_wraplength)
 
 # ─── Shop Profit Panel ────────────────────────────────────────────────────────
 
@@ -1519,7 +1676,7 @@ class SettingsPanel(tk.Frame):
         except:
             pass
         self.app.refresh()
-        messagebox.showinfo("Saved", "Settings saved successfully.")
+        self.app.show_toast("✓ Settings saved successfully")
 
     # ── Export functions ────────────────────────────────────────────────────────
 
@@ -1539,7 +1696,7 @@ class SettingsPanel(tk.Frame):
         if not filepath:
             return
         export_banners_pdf(rows, filepath)
-        messagebox.showinfo("Exported", f"Banner jobs exported to:\n{filepath}")
+        self.app.show_toast("✓ Banner jobs exported")
 
     def _export_payments_pdf(self):
         with get_db() as conn:
@@ -1556,7 +1713,7 @@ class SettingsPanel(tk.Frame):
         if not filepath:
             return
         export_payments_pdf(rows, float(total_billed), filepath)
-        messagebox.showinfo("Exported", f"Payment records exported to:\n{filepath}")
+        self.app.show_toast("✓ Payment records exported")
 
     def _export_db_csv(self):
         filepath = filedialog.asksaveasfilename(
@@ -1591,7 +1748,7 @@ class SettingsPanel(tk.Frame):
             writer.writerow(["ID", "Amount", "Date Paid", "Notes"])
             for r in payments:
                 writer.writerow([r["id"], r["amount"], fmt_date(r["date_paid"]), r["notes"]])
-        messagebox.showinfo("Exported", f"Full database exported to:\n{filepath}")
+        self.app.show_toast("✓ Database exported as CSV")
 
     def _export_db_pdf(self):
         filepath = filedialog.asksaveasfilename(
@@ -1605,7 +1762,7 @@ class SettingsPanel(tk.Frame):
             banners = conn.execute("SELECT * FROM banners ORDER BY date_sent DESC, id DESC").fetchall()
             payments = conn.execute("SELECT * FROM payments ORDER BY date_paid DESC").fetchall()
         export_full_db_pdf(banners, payments, filepath)
-        messagebox.showinfo("Exported", f"Full database exported to:\n{filepath}")
+        self.app.show_toast("✓ Full database exported as PDF")
 
     def _clear_banners(self):
         with get_db() as conn:
@@ -1623,7 +1780,7 @@ class SettingsPanel(tk.Frame):
                     conn.execute("DELETE FROM banners")
                     conn.commit()
                 self.app.refresh()
-                messagebox.showinfo("Cleared", f"All {count} banner record(s) have been deleted.")
+                self.app.show_toast(f"✓ All {count} banner record(s) deleted")
 
     def _clear_payments(self):
         with get_db() as conn:
@@ -1641,7 +1798,7 @@ class SettingsPanel(tk.Frame):
                     conn.execute("DELETE FROM payments")
                     conn.commit()
                 self.app.refresh()
-                messagebox.showinfo("Cleared", f"All {count} payment record(s) have been deleted.")
+                self.app.show_toast(f"✓ All {count} payment record(s) deleted")
 
     def _clear_all(self):
         with get_db() as conn:
@@ -1663,7 +1820,7 @@ class SettingsPanel(tk.Frame):
                     conn.execute("DELETE FROM payments")
                     conn.commit()
                 self.app.refresh()
-                messagebox.showinfo("Database Reset", "All data has been cleared.")
+                self.app.show_toast("✓ All data has been cleared")
 
 # ─── Banner Table ─────────────────────────────────────────────────────────────
 
@@ -1772,6 +1929,11 @@ class BannerTable(tk.Frame):
     def _on_scroll(self, event):
         self.canvas.yview_scroll(-1 * (event.delta // 120), "units")
 
+    def _focus_add_form(self):
+        """Scroll sidebar to top and focus the description field in add form."""
+        self.app._sidebar_canvas.yview_moveto(0)
+        self.app.add_form.desc.focus_set()
+
     def _search_focus_in(self, event):
         if self.search_entry.get() == "🔍 Search...":
             self.search_entry.delete(0, "end")
@@ -1804,10 +1966,16 @@ class BannerTable(tk.Frame):
         self.to_var.set("")
         self.refresh()
 
-    def _highlight_filter(self):
+    def _highlight_filter(self, count_map=None):
         for k, btn in self.filter_btns.items():
-            btn.config(bg=C["accent"] if k == self.filter_status else C["bg"],
-                       fg="white" if k == self.filter_status else C["muted"])
+            is_active = k == self.filter_status
+            has_items = count_map.get(k, 1) > 0 if count_map else True
+            if is_active:
+                btn.config(bg=C["accent"], fg="white", state="normal", cursor="hand2")
+            elif not has_items and k != "all":
+                btn.config(bg=C["border"], fg=C["muted2"], state="disabled", cursor="arrow")
+            else:
+                btn.config(bg=C["bg"], fg=C["muted"], state="normal", cursor="hand2")
 
     def refresh(self):
         for w in self.rows_frame.winfo_children():
@@ -1823,7 +1991,7 @@ class BannerTable(tk.Frame):
         label_map = {"all": "All", "pending": "Pending", "partial": "Partial", "paid": "Paid"}
         for key, btn in self.filter_btns.items():
             btn.config(text=f"{label_map[key]} ({count_map[key]})")
-        self._highlight_filter()
+        self._highlight_filter(count_map)
         self.count_label.config(text=f"({total_count} total)")
 
         query = "SELECT * FROM banners"
@@ -1858,6 +2026,12 @@ class BannerTable(tk.Frame):
                      bg=C["white"], fg=C["text"]).pack(pady=(8, 2))
             tk.Label(empty, text="Add your first banner job using the form on the left",
                      font=font(9), bg=C["white"], fg=C["muted"]).pack()
+            quick_add = tk.Button(empty, text="➕ Add Banner Job", font=font(10, "bold"),
+                                  bg=C["accent"], fg="white", relief="flat",
+                                  cursor="hand2", padx=16, pady=6,
+                                  command=self._focus_add_form)
+            quick_add.pack(pady=(12, 0))
+            hover_btn(quick_add, "#1d4ed8", C["accent"])
             return
 
         for i, row in enumerate(rows):
