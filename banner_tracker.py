@@ -14,6 +14,7 @@ import sys
 from datetime import datetime, date, timedelta
 from pathlib import Path
 from functools import partial
+from xml.sax.saxutils import escape
 from reportlab.lib.pagesizes import A4, letter
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -245,6 +246,17 @@ def _pdf_styles():
     )
     return title_style, subtitle_style, section_style, body_style
 
+def _pdf_wrap(text, align=TA_LEFT, font_size=8, bold=False, color="#1A1A2E"):
+    content = escape("" if text is None else str(text)).replace("\n", "<br/>")
+    return Paragraph(content, ParagraphStyle(
+        "CellWrap",
+        fontName="Helvetica-Bold" if bold else "Helvetica",
+        fontSize=font_size,
+        leading=font_size + 3,
+        alignment=align,
+        textColor=colors.HexColor(color),
+    ))
+
 
 def export_banners_pdf(rows, filepath):
     doc = SimpleDocTemplate(
@@ -296,7 +308,7 @@ def export_banners_pdf(rows, filepath):
     story.append(Paragraph("Banner Jobs", section_s))
     header = ["#", "Description", "Mail Send", "Size", "Sq Ft",
               "Print Cost", "Client Rev", "Status"]
-    col_w = [0.8*cm, 5.5*cm, 2.3*cm, 2.5*cm, 1.5*cm, 2.5*cm, 2.5*cm, 1.8*cm]
+    col_w = [0.7*cm, 6.0*cm, 2.0*cm, 2.2*cm, 1.3*cm, 1.9*cm, 2.0*cm, 1.5*cm]
     data = [header]
     for i, r in enumerate(rows, 1):
         size_str = f"{r['width_ft']}×{r['height_ft']}"
@@ -304,13 +316,13 @@ def export_banners_pdf(rows, filepath):
             size_str += f"×{r['pieces']}"
         data.append([
             str(i),
-            (r["description"] or "")[:40],
-            fmt_date(r["date_sent"]),
-            size_str,
-            f"{r['sqft']:.1f}",
-            f"Rs {r['amount']:,.0f}",
-            f"Rs {r['client_amount']:,.0f}" if r["client_amount"] else "—",
-            (r["status"] or "").upper(),
+            _pdf_wrap(r["description"] or ""),
+            _pdf_wrap(fmt_date(r["date_sent"])),
+            _pdf_wrap(size_str),
+            _pdf_wrap(f"{r['sqft']:.1f}", align=TA_RIGHT),
+            _pdf_wrap(f"Rs {r['amount']:,.0f}", align=TA_RIGHT),
+            _pdf_wrap(f"Rs {r['client_amount']:,.0f}" if r["client_amount"] else "—", align=TA_RIGHT),
+            _pdf_wrap((r["status"] or "").upper(), align=TA_CENTER, bold=True),
         ])
 
     t = LongTable(data, colWidths=col_w, repeatRows=1)
@@ -332,8 +344,11 @@ def export_banners_pdf(rows, filepath):
         ("FONTSIZE", (0, 0), (-1, 0), 8),
         ("FONTSIZE", (0, 1), (-1, -1), 8),
         ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E8E8EC")),
-        ("PADDING", (0, 0), (-1, -1), 4),
+        ("PADDING", (0, 0), (-1, -1), 6),
+        ("LEFTPADDING", (1, 1), (1, -1), 6),
+        ("RIGHTPADDING", (1, 1), (1, -1), 8),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("VALIGN", (0, 1), (-1, -1), "TOP"),
         ("ALIGN", (4, 0), (5, -1), "RIGHT"),
         ("ALIGN", (6, 0), (6, -1), "RIGHT"),
     ] + row_colors))
@@ -397,16 +412,17 @@ def export_payments_pdf(rows, total_billed, filepath):
 
     story.append(Paragraph("Payment History", section_s))
     header = ["#", "Date Paid", "Amount (Rs)", "Notes"]
-    col_w = [1*cm, 4*cm, 4*cm, 8*cm]
+    col_w = [0.9*cm, 3.5*cm, 4.2*cm, 9.2*cm]
     data = [header]
     running = 0
     for i, r in enumerate(rows, 1):
         running += r["amount"]
         data.append([
             str(i),
-            fmt_date(r["date_paid"]),
-            f"Rs {r['amount']:,.0f}" if r["amount"] >= 0 else f"−Rs {abs(r['amount']):,.0f}",
-            r["notes"] or "",
+            _pdf_wrap(fmt_date(r["date_paid"])),
+            _pdf_wrap(f"Rs {r['amount']:,.0f}" if r["amount"] >= 0 else f"−Rs {abs(r['amount']):,.0f}",
+                      align=TA_RIGHT, bold=True),
+            _pdf_wrap(r["notes"] or ""),
         ])
 
     t = LongTable(data, colWidths=col_w, repeatRows=1)
@@ -419,7 +435,8 @@ def export_payments_pdf(rows, total_billed, filepath):
         ("ROWBACKGROUNDS", (0, 1), (-1, -1),
          [colors.white, colors.HexColor("#F8F8FB")]),
         ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E8E8EC")),
-        ("PADDING", (0, 0), (-1, -1), 5),
+        ("PADDING", (0, 0), (-1, -1), 6),
+        ("VALIGN", (0, 1), (-1, -1), "TOP"),
         ("ALIGN", (2, 0), (2, -1), "RIGHT"),
     ]))
     story.append(t)
@@ -455,7 +472,7 @@ def export_full_db_pdf(banners, payments, filepath):
     if banners:
         header = ["#", "Description", "Mail Send", "Size", "Sq Ft", "Print Cost",
                   "Client Rev", "Status"]
-        col_w = [0.8*cm, 5.2*cm, 2.3*cm, 2.3*cm, 1.5*cm, 2.5*cm, 2.5*cm, 1.7*cm]
+        col_w = [0.7*cm, 5.8*cm, 2.0*cm, 2.1*cm, 1.3*cm, 1.9*cm, 2.0*cm, 1.5*cm]
         data = [header]
         for i, r in enumerate(banners, 1):
             size_str = f"{r['width_ft']}×{r['height_ft']}"
@@ -463,13 +480,13 @@ def export_full_db_pdf(banners, payments, filepath):
                 size_str += f"×{r['pieces']}"
             data.append([
                 str(i),
-                (r["description"] or "")[:38],
-                fmt_date(r["date_sent"]),
-                size_str,
-                f"{r['sqft']:.1f}",
-                f"Rs {r['amount']:,.0f}",
-                f"Rs {r['client_amount']:,.0f}" if r["client_amount"] else "—",
-                (r["status"] or "").upper(),
+                _pdf_wrap(r["description"] or "", font_size=7.5),
+                _pdf_wrap(fmt_date(r["date_sent"]), font_size=7.5),
+                _pdf_wrap(size_str, font_size=7.5),
+                _pdf_wrap(f"{r['sqft']:.1f}", align=TA_RIGHT, font_size=7.5),
+                _pdf_wrap(f"Rs {r['amount']:,.0f}", align=TA_RIGHT, font_size=7.5),
+                _pdf_wrap(f"Rs {r['client_amount']:,.0f}" if r["client_amount"] else "—", align=TA_RIGHT, font_size=7.5),
+                _pdf_wrap((r["status"] or "").upper(), align=TA_CENTER, bold=True, font_size=7.5),
             ])
         t = LongTable(data, colWidths=col_w, repeatRows=1)
         t.setStyle(TableStyle([
@@ -480,7 +497,8 @@ def export_full_db_pdf(banners, payments, filepath):
             ("ROWBACKGROUNDS", (0, 1), (-1, -1),
              [colors.white, colors.HexColor("#F5F3FF")]),
             ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E8E8EC")),
-            ("PADDING", (0, 0), (-1, -1), 4),
+            ("PADDING", (0, 0), (-1, -1), 5),
+            ("VALIGN", (0, 1), (-1, -1), "TOP"),
         ]))
         story.append(t)
 
@@ -489,14 +507,15 @@ def export_full_db_pdf(banners, payments, filepath):
     if payments:
         total_paid = sum(p["amount"] for p in payments)
         ph = ["#", "Date Paid", "Amount (Rs)", "Notes"]
-        pcol_w = [1*cm, 4*cm, 4*cm, 9.8*cm]
+        pcol_w = [0.9*cm, 3.5*cm, 4.2*cm, 9.4*cm]
         pdata = [ph]
         for i, r in enumerate(payments, 1):
             pdata.append([
                 str(i),
-                fmt_date(r["date_paid"]),
-                f"Rs {r['amount']:,.0f}" if r["amount"] >= 0 else f"−Rs {abs(r['amount']):,.0f}",
-                r["notes"] or "",
+                _pdf_wrap(fmt_date(r["date_paid"])),
+                _pdf_wrap(f"Rs {r['amount']:,.0f}" if r["amount"] >= 0 else f"−Rs {abs(r['amount']):,.0f}",
+                          align=TA_RIGHT, bold=True),
+                _pdf_wrap(r["notes"] or ""),
             ])
         pt = LongTable(pdata, colWidths=pcol_w, repeatRows=1)
         pt.setStyle(TableStyle([
@@ -507,7 +526,8 @@ def export_full_db_pdf(banners, payments, filepath):
             ("ROWBACKGROUNDS", (0, 1), (-1, -1),
              [colors.white, colors.HexColor("#F5F3FF")]),
             ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E8E8EC")),
-            ("PADDING", (0, 0), (-1, -1), 4),
+            ("PADDING", (0, 0), (-1, -1), 5),
+            ("VALIGN", (0, 1), (-1, -1), "TOP"),
             ("ALIGN", (2, 0), (2, -1), "RIGHT"),
         ]))
         story.append(pt)
@@ -1303,10 +1323,12 @@ class PaymentPanel(tk.Frame):
                         if row["amount"] < 0:
                             amt_text = f"−{fmt_rs(abs(row['amount']))}"
                         tk.Label(r, text=amt_text, font=font(9, "bold"),
-                                 bg=C["white"], fg=amt_color).pack(side="right", padx=4)
+                                 bg=C["white"], fg=amt_color, wraplength=130,
+                                 justify="right").pack(side="right", padx=4)
                         if row["notes"]:
                             tk.Label(r, text=row["notes"], font=font(7),
-                                     bg=C["white"], fg=C["muted2"]).pack(side="right", padx=4)
+                                     bg=C["white"], fg=C["muted2"], wraplength=180,
+                                     justify="right").pack(side="right", padx=4)
                         tk.Label(r, text=f"    {fmt_date(row['date_paid'])}", font=font(8),
                                  bg=C["white"], fg=C["muted"]).pack(side="left", padx=4)
 
@@ -1888,17 +1910,7 @@ class BannerTable(tk.Frame):
 
         tk.Frame(self, bg=C["border"], height=1).pack(fill="x")
 
-        # Column headers
-        cols_frame = tk.Frame(self, bg=C["bg"], pady=5, padx=8)
-        cols_frame.pack(fill="x")
-        cols = [("#", 3), ("Description", 18), ("Mail Send", 10),
-                ("Size", 9), ("Sq Ft", 7), ("Print Cost", 9), ("Client Rev", 9),
-                ("Status", 8), ("Actions", 14)]
-        for i, (name, w) in enumerate(cols):
-            tk.Label(cols_frame, text=name, font=font(8), bg=C["bg"], fg=C["muted"],
-                     width=w, anchor="w").grid(row=0, column=i, padx=2)
-
-        # Scrollable rows only
+        # Scrollable section (headers + rows)
         scroll_wrapper = tk.Frame(self, bg=C["white"])
         scroll_wrapper.pack(fill="both", expand=True)
 
@@ -1908,10 +1920,22 @@ class BannerTable(tk.Frame):
         scrollbar.pack(side="right", fill="y")
         self.canvas.pack(side="left", fill="both", expand=True)
 
-        self.rows_frame = tk.Frame(self.canvas, bg=C["white"])
-        self.canvas_window = self.canvas.create_window((0, 0), window=self.rows_frame, anchor="nw")
-        self.rows_frame.bind("<Configure>", self._on_rows_configure)
+        self.content_frame = tk.Frame(self.canvas, bg=C["white"])
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.content_frame, anchor="nw")
+        self.content_frame.bind("<Configure>", self._on_rows_configure)
         self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfig(self.canvas_window, width=e.width))
+
+        cols_frame = tk.Frame(self.content_frame, bg=C["bg"], pady=6, padx=10)
+        cols_frame.pack(fill="x")
+        cols = [("#", 4), ("Description", 24), ("Mail Send", 11),
+                ("Size", 10), ("Sq Ft", 8), ("Print Cost", 10), ("Client Rev", 10),
+                ("Status", 9), ("Actions", 15)]
+        for i, (name, w) in enumerate(cols):
+            tk.Label(cols_frame, text=name, font=font(8), bg=C["bg"], fg=C["muted"],
+                     width=w, anchor="w").grid(row=0, column=i, padx=4)
+
+        self.rows_frame = tk.Frame(self.content_frame, bg=C["white"])
+        self.rows_frame.pack(fill="both", expand=True)
 
         # Bind mousewheel only when hovering over banner table
         self.canvas.bind("<Enter>", lambda e: self._bind_scroll())
@@ -2069,7 +2093,7 @@ class BannerTable(tk.Frame):
 
         vals = [
             (str(idx), 3, C["muted"], "normal"),
-            ((row["description"] or "")[:22], 18, C["text"], "bold"),
+            ((row["description"] or ""), 24, C["text"], "bold"),
             (fmt_date(row["date_sent"]), 10, C["muted"], "normal"),
             (size_str, 9, C["muted"], "normal"),
             (f"{row['sqft']:.1f}", 7, C["purple"], "bold"),
@@ -2078,7 +2102,8 @@ class BannerTable(tk.Frame):
         ]
         for text, width, fg, weight in vals:
             lbl = tk.Label(r, text=text, font=font(9, weight), bg=bg,
-                           fg=fg, width=width, anchor="w", padx=3, pady=7)
+                           fg=fg, width=width, anchor="w", padx=4, pady=7,
+                           wraplength=width * 9, justify="left")
             lbl.pack(side="left")
             lbl.bind("<Enter>", on_enter)
             lbl.bind("<Leave>", on_leave)
@@ -2178,7 +2203,7 @@ class BannerTable(tk.Frame):
 
         if row["notes"]:
             tk.Label(r, text=f"📝 {row['notes']}", font=font(7), bg=bg,
-                     fg=C["muted2"], padx=6).pack(side="right")
+                     fg=C["muted2"], padx=6, wraplength=180, justify="left").pack(side="right")
 
 # ─── Edit Banner Dialog ───────────────────────────────────────────────────────
 
