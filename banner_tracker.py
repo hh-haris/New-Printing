@@ -105,12 +105,16 @@ C = {
     "muted2":    "#BCBCCC",
     "accent":    "#2563EB",
     "accent_lt": "#EFF6FF",
+    "accent_hv": "#DBEAFE",
     "green":     "#16A34A",
     "green_lt":  "#F0FDF4",
+    "green_hv":  "#BBF7D0",
     "red":       "#DC2626",
     "red_lt":    "#FEF2F2",
+    "red_hv":    "#FECACA",
     "orange":    "#D97706",
     "orange_lt": "#FFFBEB",
+    "orange_hv": "#FDE68A",
     "purple":    "#7C3AED",
     "purple_lt": "#F5F3FF",
     "row_alt":   "#F8F8FB",
@@ -1049,19 +1053,19 @@ class SettingsPanel(tk.Frame):
                   bg=C["orange_lt"], fg=C["orange"], relief="flat",
                   cursor="hand2", pady=5, command=self._clear_banners)
         clr_rec_btn.pack(fill="x", pady=(0, 4))
-        hover_btn(clr_rec_btn, "#FDE68A", C["orange_lt"])
+        hover_btn(clr_rec_btn, C["orange_hv"], C["orange_lt"])
 
         clr_pay_btn = tk.Button(dm_body, text="Clear All Payments", font=font(8, "bold"),
                   bg=C["orange_lt"], fg=C["orange"], relief="flat",
                   cursor="hand2", pady=5, command=self._clear_payments)
         clr_pay_btn.pack(fill="x", pady=(0, 4))
-        hover_btn(clr_pay_btn, "#FDE68A", C["orange_lt"])
+        hover_btn(clr_pay_btn, C["orange_hv"], C["orange_lt"])
 
         clr_all_btn = tk.Button(dm_body, text="⚠  Reset Entire Database", font=font(8, "bold"),
                   bg=C["red_lt"], fg=C["red"], relief="flat",
                   cursor="hand2", pady=5, command=self._clear_all)
         clr_all_btn.pack(fill="x")
-        hover_btn(clr_all_btn, "#FECACA", C["red_lt"])
+        hover_btn(clr_all_btn, C["red_hv"], C["red_lt"])
 
     def _save(self):
         try:
@@ -1176,7 +1180,7 @@ class BannerTable(tk.Frame):
                     fg=C["accent"], relief="flat", cursor="hand2", padx=8, pady=3,
                     command=self._export_csv)
         export_btn.pack(side="left", padx=(0, 8))
-        hover_btn(export_btn, "#DBEAFE", C["accent_lt"])
+        hover_btn(export_btn, C["accent_hv"], C["accent_lt"])
 
         self.filter_btns = {}
         for label, key in [("All","all"),("Pending","pending"),("Partial","partial"),("Paid","paid")]:
@@ -1457,7 +1461,6 @@ class BannerTable(tk.Frame):
 
         def make_dup(rrow):
             def do():
-                price = float(get_setting("price_per_sqft") or 50)
                 now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 with get_db() as conn:
                     conn.execute(
@@ -1481,13 +1484,13 @@ class BannerTable(tk.Frame):
                       relief="flat", cursor="hand2", padx=4, pady=1,
                       command=make_paid(row["id"]))
             paid_btn.pack(side="left", padx=1)
-            hover_btn(paid_btn, "#BBF7D0", C["green_lt"])
+            hover_btn(paid_btn, C["green_hv"], C["green_lt"])
         else:
             pend_btn = tk.Button(act, text="↩ Pending", font=font(8), bg=C["orange_lt"], fg=C["orange"],
                       relief="flat", cursor="hand2", padx=4, pady=1,
                       command=make_pending(row["id"]))
             pend_btn.pack(side="left", padx=1)
-            hover_btn(pend_btn, "#FDE68A", C["orange_lt"])
+            hover_btn(pend_btn, C["orange_hv"], C["orange_lt"])
 
         edit_btn = tk.Button(act, text="✏️", font=font(8), bg=bg, fg=C["muted"],
                   relief="flat", cursor="hand2", padx=3, pady=1,
